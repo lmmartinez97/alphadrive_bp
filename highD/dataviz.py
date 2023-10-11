@@ -161,13 +161,14 @@ def show_gif(scene_data):
         anim.save("test.gif", writer=writer)
     plt.show()
 
+dataset_location = "/home/lmmartinez/Tesis/datasets/highD/data_raw/"
 
 start = time()
-df = pd.read_csv("./highd-dataset-v1.0/data/01_tracks.csv")
-tracks = read_track_csv("./highd-dataset-v1.0/data/01_tracks.csv")
-static_info = read_static_info("./highd-dataset-v1.0/data/01_tracksMeta.csv")
-video_info = read_meta_info("./highd-dataset-v1.0/data/01_recordingMeta.csv")
-im_path = "highd-dataset-v1.0/data_raw/01_highway.png"
+df = pd.read_csv(dataset_location + "01_tracks.csv")
+tracks = read_track_csv(dataset_location + "01_tracks.csv")
+static_info = read_static_info(dataset_location + "01_tracksMeta.csv")
+video_info = read_meta_info(dataset_location + "01_recordingMeta.csv")
+im_path = dataset_location + "01_highway.png"
 
 scene_data = SceneData(df=df, static_info=static_info, video_info=video_info)
 scene_data.get_background_img(im_path)
