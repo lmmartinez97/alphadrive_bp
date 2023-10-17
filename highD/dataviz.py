@@ -368,12 +368,12 @@ def main():
         vehicle_groups = scene_data.get_vehicle_groups()
         p4 = time()
         print("Groups extracted - Time elapsed is: {} seconds".format(p4-p3))
-        print("Total number of groups is: {}".format(len(scene_data.vehicle_groups_flat)))
         print("Saving to csv")
         p5 = time()
         scene_data.save_vehicle_groups()
         p6 = time()
         print("Groups saved - Time elapsed is: {} seconds".format(p5-p6))
+        print("Total number of groups is: {}".format(len(scene_data.vehicle_groups_flat)))
         row_list.append([p2-p1, p4-p3, p6-p5, scene_data.total_frame_number, len(scene_data.vehicle_groups_flat)])
 
     df = pd.concat([df, pd.DataFrame(row_list, columns = df.columns)])
