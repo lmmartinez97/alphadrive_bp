@@ -26,9 +26,7 @@ def print_bl():
     print("\n")
 
 
-mlp.rcParams["animation.embed_limit"] = (
-    2**128
-)  # Increased animation size to save gifs if necessary
+mlp.rcParams["animation.embed_limit"] = (2**128)  # Increased animation size to save gifs if necessary
 
 class SceneData:
     '''
@@ -37,14 +35,19 @@ class SceneData:
     Attributes:
         dataset_location: a path to the directory in which the dataset is stored.
         dataset_index: index of the recording that is to be addressed
+        sampling_period: time period between sampled frames. Needs to be a multiple of 40 ms
     '''
-    def __init__(self, dataset_location = None, dataset_index = None):
+    def __init__(self, dataset_location = None, dataset_index = None, sampling_period = 40):
         self.dataset_index  = dataset_index
         self.dataset_location = dataset_location
+        self.sampling_period = sampling_period
         self.df_location = dataset_location + str(dataset_index).zfill(2) + "_tracks.csv"
         self.static_info_location = dataset_location + str(dataset_index).zfill(2) + "_tracksMeta.csv"
         self.video_info_location = dataset_location + str(dataset_index).zfill(2) + "_recordingMeta.csv"
         self.df_location = dataset_location + str(dataset_index).zfill(2) + "_tracks.csv"
+
+        self.max_frame_numner = 0
+        self.frame_step = 0
 
         self.df = pd.read_csv(self.df_location)
         self.static_info = read_static_info(self.static_info_location)
@@ -97,11 +100,16 @@ class SceneData:
             Parameters:
                 None, inputs to the method are attributes of the class
             Returns:
-                df_list: a list of dataframes - one per frame of recorded data - in which every vehicle in the scene is included.
+                df_list: a list of dataframes - one per sampled frame - in which every vehicle in the scene is included.
         '''
-        self.df_list = [None] * self.df.frame.nunique()  # Preallocate list to improve speed - number of dataframes is equal to that of video frames
-        for frame_number in range(1, self.df.frame.nunique() + 1, 1):  # Iterate through every video frame in the dataframe - frame enumeration starts at 1
-            self.df_list[frame_number - 1] = self.df[np.in1d(self.df["frame"].values, [frame_number])]  # Select rows of dataframe with df["frame"] == frame_number
+        self.max_frame_number = self.df.frame.nunique()
+        self.frame_step = int(np.floor(self.sampling_period / 40))
+        frame_list = list(range(1, self.max_frame_number + 1, self.frame_step))
+        print("Frame step is {}".format(self.frame_step))
+        print("Number of frames to be sampled is {}".format(len(frame_list)))
+        self.df_list = [None] * len(frame_list)  # Preallocate list to improve speed - number of dataframes is equal to that of video frames
+        for idx, frame_number in enumerate(frame_list):  # Iterate through every video frame in the dataframe - frame enumeration starts at 1
+            self.df_list[idx] = self.df[np.in1d(self.df["frame"].values, [frame_number])]  # Select rows of dataframe with df["frame"] == frame_number
         return self.df_list
 
     def get_df_direction_list(self):
@@ -115,13 +123,18 @@ class SceneData:
         eastbound_vehicles = []  # contains the vehicle_id of every vehicle driving East
         westbound_vehicles = []  # contains the vehicle_id of every vehicle driving West
         for vehicle_id in self.static_info.keys():
-            self.longest_trajectory = (self.static_info[vehicle_id]["traveledDistance"] if self.longest_trajectory < self.static_info[vehicle_id]["traveledDistance"] else self.longest_trajectory)  # get longest trajectory in dataset to calculate img scale factor
+            self.longest_trajectory = (
+                self.static_info[vehicle_id]["traveledDistance"]
+                if self.longest_trajectory
+                < self.static_info[vehicle_id]["traveledDistance"]
+                else self.longest_trajectory
+            )  # get longest trajectory in dataset to calculate img scale factor
             if self.static_info[vehicle_id]["drivingDirection"] == 2.0:
                 eastbound_vehicles.append(vehicle_id)
             else:
                 westbound_vehicles.append(vehicle_id)
 
-        self.df_direction_list = [None] * self.df.frame.nunique()  # For every frame, save two dataframes - one for eastbound vehicles and one for westbound vehicles
+        self.df_direction_list = [None] * self.total_frame_number  # For every frame, save two dataframes - one for eastbound vehicles and one for westbound vehicles
         dummy_east, dummy_west = None, None
         for idx in range(len(self.df_list)):
             dummy_east = self.df_list[idx][
@@ -345,13 +358,14 @@ class SceneData:
             anim.save("test.gif", writer=writer)
         # plt.show()
         return self.anim
+
    
 def main():
     if platform == 'darwin':
         dataset_location = "/Users/lmiguelmartinez/Tesis/datasets/highD/data/"
     else:
         dataset_location = "/home/lmmartinez/Tesis/datasets/highD/data/"
-
+    sampling_period = 1000
     df = pd.DataFrame(columns=['Loading', 'Get groups', 'Save groups', 'Frames', 'Groups'])
 
     row_list = []
@@ -359,7 +373,7 @@ def main():
     for dataset_index in range(1,61):
         print("Loading data - File " + str(dataset_index).zfill(2))
         p1 = time()
-        scene_data = SceneData(dataset_location=dataset_location, dataset_index=dataset_index)
+        scene_data = SceneData(dataset_location=dataset_location, dataset_index=dataset_index, sampling_period= 1000)
         p2 = time()
         print("Data loaded - Time elapsed is: {} seconds".format(p2-p1))
         print("Total number of frames is: {}".format(scene_data.total_frame_number))
@@ -377,7 +391,7 @@ def main():
         row_list.append([p2-p1, p4-p3, p6-p5, scene_data.total_frame_number, len(scene_data.vehicle_groups_flat)])
 
     df = pd.concat([df, pd.DataFrame(row_list, columns = df.columns)])
-    df.to_csv(dataset_location + 'computation_info.csv', index=True, index_label='File')
+    df.to_csv(dataset_location + 'computation_info_' + str(sampling_period) + 'ms.csv', index=True, index_label='File')
 
 if __name__ == "__main__":
     main()
