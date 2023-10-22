@@ -194,7 +194,7 @@ def read_groups(input_path):
         Returns:
             smaller_dfs: list of dataframes
     """
-    read_df = pandas.read_csv("/Users/lmiguelmartinez/Tesis/datasets/highD/groups_1000ms/01_groups.csv")
+    read_df = pandas.read_csv(input_path)
 
     # Find the indices where the incorrect values are located
     nan_indices = read_df.index[read_df['Index'] == "Index"].tolist()
