@@ -240,9 +240,9 @@ def split_and_save_to_hdf5(image_list, train_ratio, val_ratio, hdf5_file):
 
 def main():
     if platform == 'darwin':
-        dataset_location = "/Users/lmiguelmartinez/Tesis/datasets/highD/data/"
+        dataset_location = "/Users/lmiguelmartinez/Tesis/datasets/highD/groups_1000ms/"
     else:
-        dataset_location = "/home/lmmartinez/Tesis/datasets/highD/data/"
+        dataset_location = "/home/lmmartinez/Tesis/datasets/highD/groups_1000ms/"
     rx = 50 # horizontal semiaxis of ellipse to consider as ROI
     ry = 6 # vertical semiaxis of ellipse to consider as ROI
     sx = 0.5
