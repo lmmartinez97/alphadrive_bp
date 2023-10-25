@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib as mlp
 import matplotlib.pyplot as plt
+import os
 import seaborn as sns
 
 from rich import print
@@ -248,29 +249,26 @@ def main():
     sx = 0.5
     sy = 0.1
 
-    df_groups_list = read_groups(dataset_location + str(1).zfill(2) + "_groups.csv")
-
-    for dataset_index in range(2,61):
+    for dataset_index in range(1,61):
+        print("Importing group list {} of 60".format(dataset_index))
         df_groups_list = df_groups_list + read_groups(dataset_location + str(dataset_index).zfill(2) + "_groups.csv")
-
-    start = time()
-    field = PotentialField(rx, ry, sx, sy, df_groups_list)
-    field_list = field.calculate_field_list()
-    end = time()
-    print("Time taken is {}".format(end-start))
-    print("The number of images generated is: {}".format(len(field_list)))
-    filename = '/home/lmmartinez/Tesis/datasets/highD/images/images_1000ms.hdf5'
-
-    if os.path.exists(filename):
-        try:
-            os.remove(filename)
-            print(f"File '{filename}' has been deleted.")
-        except OSError as e:
-            print(f"Error deleting the file '{filename}': {e}")
-    else:
-        # File does not exist, continue with the program
-        print(f"File '{filename}' does not exist.")
-        split_and_save_to_hdf5(image_list=field_list, train_ratio=0.6, val_ratio=0.2, hdf5_file=filename)
+        start = time()
+        field = PotentialField(rx, ry, sx, sy, df_groups_list)
+        field_list = field.calculate_field_list()
+        end = time()
+        print("Time taken is {}".format(end-start))
+        print("The number of images generated is: {}".format(len(field_list)))
+        filename = '/home/lmmartinez/OneDrive/Tesis/processed_datasets/images_1000ms' + str(dataset_index).zfill(2) + '_1000ms.hdf5'
+        if os.path.exists(filename):
+            try:
+                os.remove(filename)
+                print(f"File '{filename}' has been deleted.")
+            except OSError as e:
+                print(f"Error deleting the file '{filename}': {e}")
+        else:
+            # File does not exist, continue with the program
+            print(f"File '{filename}' does not exist.")
+            split_and_save_to_hdf5(image_list=field_list, train_ratio=0.6, val_ratio=0.2, hdf5_file=filename)
 
 if __name__ == "__main__":
     main()
