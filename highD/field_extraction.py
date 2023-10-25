@@ -251,7 +251,7 @@ def main():
 
     for dataset_index in range(1,61):
         print("Importing group list {} of 60".format(dataset_index))
-        df_groups_list = df_groups_list + read_groups(dataset_location + str(dataset_index).zfill(2) + "_groups.csv")
+        df_groups_list = read_groups(dataset_location + str(dataset_index).zfill(2) + "_groups.csv")
         start = time()
         field = PotentialField(rx, ry, sx, sy, df_groups_list)
         field_list = field.calculate_field_list()
