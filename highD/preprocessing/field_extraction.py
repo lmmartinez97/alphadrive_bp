@@ -249,7 +249,7 @@ def main():
     sx = 0.5
     sy = 0.1
 
-    for dataset_index in range(1,61):
+    for dataset_index in range(1,2):
         print("Importing group list {} of 60".format(dataset_index))
         df_groups_list = read_groups(dataset_location + str(dataset_index).zfill(2) + "_groups.csv")
         start = time()
@@ -258,7 +258,7 @@ def main():
         end = time()
         print("Time taken is {}".format(end-start))
         print("The number of images generated is: {}".format(len(field_list)))
-        filename = '/home/lmmartinez/OneDrive/Tesis/processed_datasets/images_1000ms' + str(dataset_index).zfill(2) + '_1000ms.hdf5'
+        filename = '/Users/lmiguelmartinez/Tesis/datasets/highD/images_1000ms/' + str(dataset_index).zfill(2) + '_images_1000ms.hdf5'
         if os.path.exists(filename):
             try:
                 os.remove(filename)
