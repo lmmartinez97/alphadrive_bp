@@ -106,11 +106,7 @@ class PotentialField:
             c = np.square(np.sin(ang)) / (2 * np.square(sigma_x)) + np.square(np.cos(ang)) / (2 * np.square(sigma_y))
             k = np.linalg.norm([vehicle["xVelocity"], vehicle["yVelocity"]])
             self.grid = np.add(self.grid, self.get_field_value(dx, dy, a, b, c, k))
-
-        #normalize potential field
-        self.normalized_grid = self.grid / np.linalg.norm(self.grid, 'fro')
-        self.normalized_grid = (self.normalized_grid - np.min(self.normalized_grid)) / (np.max(self.normalized_grid) - np.min(self.normalized_grid))
-        return self.normalized_grid
+        return self.grid
     
     def calculate_field_list(self):
         '''
@@ -129,8 +125,52 @@ class PotentialField:
             self.ego_vehicle = self.vehicle_list[0]
             self.x_ego, self.y_ego = self.ego_vehicle["x"], self.ego_vehicle["y"]
             self.field_list[idx] = self.calculate_field()
+        self.field_list = np.array(self.field_list, dtype = np.float32)
 
         return self.field_list
+    
+    def save_to_hdf5(self, train_ratio, val_ratio, hdf5_file):
+
+        """
+        Split a list of NumPy arrays into train, validation, and test datasets and save them to an HDF5 file.
+
+        :param image_list: List of NumPy arrays (images).
+        :param train_ratio: Ratio of data to allocate for training (e.g., 0.7 for 70%).
+        :param val_ratio: Ratio of data to allocate for validation (e.g., 0.15 for 15%).
+        :param hdf5_file: Name of the HDF5 file to save the datasets.
+        """
+        if train_ratio + val_ratio >= 1.0:
+            raise ValueError("The sum of train_ratio and val_ratio should be less than 1.0.")
+        
+        total_samples = len(self.field_list)
+        train_size = int(total_samples * train_ratio)
+        val_size = int(total_samples * val_ratio)
+
+        #np.random.shuffle(field_list)
+        # Split the data into train, validation, and test sets
+        train_data = self.field_list[:train_size]
+        val_data = self.field_list[train_size:train_size + val_size]
+        test_data = self.field_list[train_size + val_size:]
+
+        #reescale the images for saving
+        train_max, train_min = np.max(train_data), np.min(train_data)
+
+        train_data  = 255 * (train_data - train_min) / (train_max - train_min)
+        val_data  = 255 * (val_data - train_min) / (train_max - train_min)
+        test_data  = 255 * (test_data - train_min) / (train_max - train_min)
+
+        train_data = train_data.astype(np.uint8)
+        val_data = val_data.astype(np.uint8)
+        test_data = test_data.astype(np.uint8)
+        metadata = {'train_max': train_max, 'train_min': train_min}
+
+        # Save the datasets to an HDF5 file
+        with h5py.File(hdf5_file, "w") as hf:
+            hf.create_dataset("train", data=train_data)
+            hf.create_dataset("validation", data=val_data)
+            hf.create_dataset("test", data=test_data)
+            for key, value in metadata.items():
+                hf.attrs[key] = value
     
     def plot_field(self, idx = None):
         '''
@@ -207,37 +247,6 @@ class PotentialField:
         ax.set_title("Potential field heat map - Frame {}".format(int(self.ego_vehicle["frame"])))
         plt.show()
 
-def split_and_save_to_hdf5(image_list, train_ratio, val_ratio, hdf5_file):
-    """
-    Split a list of NumPy arrays into train, validation, and test datasets and save them to an HDF5 file.
-
-    :param image_list: List of NumPy arrays (images).
-    :param train_ratio: Ratio of data to allocate for training (e.g., 0.7 for 70%).
-    :param val_ratio: Ratio of data to allocate for validation (e.g., 0.15 for 15%).
-    :param hdf5_file: Name of the HDF5 file to save the datasets.
-    """
-    if train_ratio + val_ratio >= 1.0:
-        raise ValueError("The sum of train_ratio and val_ratio should be less than 1.0.")
-
-    total_samples = len(image_list)
-    train_size = int(total_samples * train_ratio)
-    val_size = int(total_samples * val_ratio)
-    test_size = total_samples - train_size - val_size
-
-    # Shuffle the image list to randomize the data
-    np.random.shuffle(image_list)
-
-    # Split the data into train, validation, and test sets
-    train_data = image_list[:train_size]
-    val_data = image_list[train_size:train_size + val_size]
-    test_data = image_list[train_size + val_size:]
-
-    print("Saving to file " + hdf5_file)
-    # Save the datasets to an HDF5 file
-    with h5py.File(hdf5_file, "w") as hf:
-        hf.create_dataset("train", data=np.array(train_data))
-        hf.create_dataset("validation", data=np.array(val_data))
-        hf.create_dataset("test", data=np.array(test_data))
 
 def main():
     if platform == 'darwin':
@@ -249,7 +258,7 @@ def main():
     sx = 0.5
     sy = 0.1
 
-    for dataset_index in range(1,2):
+    for dataset_index in range(1,61):
         print("Importing group list {} of 60".format(dataset_index))
         df_groups_list = read_groups(dataset_location + str(dataset_index).zfill(2) + "_groups.csv")
         start = time()
@@ -258,17 +267,16 @@ def main():
         end = time()
         print("Time taken is {}".format(end-start))
         print("The number of images generated is: {}".format(len(field_list)))
-        filename = '/Users/lmiguelmartinez/Tesis/datasets/highD/images_1000ms/' + str(dataset_index).zfill(2) + '_images_1000ms.hdf5'
+        filename = '/home/lmmartinez/containers/tensorflow_gpu/Tesis/datasets/highD/images_int/' + str(dataset_index).zfill(2) + '_images.hdf5'
         if os.path.exists(filename):
             try:
                 os.remove(filename)
                 print(f"File '{filename}' has been deleted.")
             except OSError as e:
                 print(f"Error deleting the file '{filename}': {e}")
-        else:
-            # File does not exist, continue with the program
-            print(f"File '{filename}' does not exist.")
-            split_and_save_to_hdf5(image_list=field_list, train_ratio=0.6, val_ratio=0.2, hdf5_file=filename)
+        # File does not exist, continue with the program
+        print(f"File '{filename}' does not exist.")
+        field.save_to_hdf5(train_ratio=0.6, val_ratio=0.2, hdf5_file=filename)
 
 if __name__ == "__main__":
     main()
