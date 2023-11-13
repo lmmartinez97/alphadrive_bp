@@ -1,3 +1,6 @@
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 import numpy as np
 import pandas as pd
 import matplotlib as mlp
@@ -21,12 +24,8 @@ sns.set_style("whitegrid")
 sns.set_context("paper")
 sns.color_palette("hls", 8)
 
-
-def print_bl():
-    print("\n")
-
-
 mlp.rcParams["animation.embed_limit"] = (2**128)  # Increased animation size to save gifs if necessary
+pd.set_option('mode.chained_assignment', None)
 
 class SceneData:
     '''
@@ -44,24 +43,23 @@ class SceneData:
         self.df_location = dataset_location + str(dataset_index).zfill(2) + "_tracks.csv"
         self.static_info_location = dataset_location + str(dataset_index).zfill(2) + "_tracksMeta.csv"
         self.video_info_location = dataset_location + str(dataset_index).zfill(2) + "_recordingMeta.csv"
-        self.df_location = dataset_location + str(dataset_index).zfill(2) + "_tracks.csv"
+        
+        self.bg_image = None
+        self.bg_image_scaling_factor = None
+        self.total_frame_number = 0
+        self.longest_trajectory = 0
+        self.historical_aggregations = None
 
-        self.max_frame_numner = 0
-        self.frame_step = 0
+        self.frame_step = int(np.floor(self.sampling_period / 40))
 
         self.df = pd.read_csv(self.df_location)
-        self.static_info = read_static_info(self.static_info_location)
+        self.static_info = pd.read_csv(self.static_info_location)
         self.video_info = read_meta_info(self.video_info_location)
         self.frame_delay = 1000 / self.video_info["frameRate"]
 
-        self.df_list = self.get_df_list()
-        self.total_frame_number = len(self.df_list)
-        self.longest_trajectory = 0
-        self.df_direction_list = self.get_df_direction_list()
-        self.bg_image = None
-        self.bg_image_scaling_factor = None
-        self.get_background_img(dataset_location + str(dataset_index).zfill(2) + "_highway.png")
+        self.df_list, self.df_direction_list = self.get_df_list()
 
+        self.get_background_img(dataset_location + str(dataset_index).zfill(2) + "_highway.png")
 
     def get_background_img(self, path):
         '''
@@ -74,145 +72,141 @@ class SceneData:
         self.bg_image = plt.imread(path)
         self.bg_image_scaling_factor = np.max((np.max(self.bg_image.shape), self.longest_trajectory)) / np.min((np.max(self.bg_image.shape), self.longest_trajectory))  # Calculates the scaling factor between img size and trajectory length
 
-    def get_distance_between_vehicles(self, t1, t2):
-        '''
-        Gets the distance between two vehicles.
-        Notation: 
-            (x, y) - coordinates of the top left corner of the bounding box of the vehicle.
-            (w, h) - width and height of the bounding box.
-
-            Parameters:
-                t1: Tuple-like in the form (x1, y1, w1, h1).
-                t2: Tuple-like in the form (x2, y2, w2, h2)
-            Returns:
-                dist: distance between vehicles
-        '''
-        x1, y1, w1, h1 = t1
-        x2, y2, w2, h2 = t2
-        c1 = np.array([x1 + w1/2, y1 + h1/2])
-        c2 = np.array([x2 + w2/2, y2 + h2/2])
-        dist = np.linalg.norm(c1-c2)
-        return dist
-    
     def get_df_list(self):
-        '''
-        Refactors information from track format to frame format.
-            Parameters:
-                None, inputs to the method are attributes of the class
-            Returns:
-                df_list: a list of dataframes - one per sampled frame - in which every vehicle in the scene is included.
-        '''
-        self.max_frame_number = self.df.frame.nunique()
-        self.frame_step = int(np.floor(self.sampling_period / 40))
-        frame_list = list(range(1, self.max_frame_number + 1, self.frame_step))
+        """
+        Get data organized into lists by frame and driving direction.
+
+        Returns:
+            tuple: A tuple containing two lists.
+                - List 1: DataFrames grouped by frame.
+                - List 2: DataFrames grouped by frame and driving direction.
+        """
+        # Filter the DataFrame to include vehicles in specified frames
+        frame_df = self.df.groupby((self.df.frame - 1) % self.frame_step == 0).get_group(1)
+
+        # Calculate the total number of frames
+        self.total_frame_number = frame_df.frame.nunique()
+
+        # Merge the filtered DataFrame with static information
+        merged_df = frame_df.merge(self.static_info, on='id', how='left')
+        # Add a 'drivingDirection' column with initial values set to None
+        frame_df['drivingDirection'] = [None] * len(frame_df)
+        # Populate the 'drivingDirection' column based on 'merged_df'
+        frame_df['drivingDirection'] = np.where(merged_df["drivingDirection"] == 2.0, "East", "West")
+        #Refactor frame column with new sampling period
+        frame_df.frame = (frame_df.frame-1) / self.frame_step
+        frame_df.frame = frame_df.frame.astype(int)
+        # Group vehicles by frame
+        frame_groups = frame_df.groupby("frame")
         print("Frame step is {}".format(self.frame_step))
-        print("Number of frames to be sampled is {}".format(len(frame_list)))
-        self.df_list = [None] * len(frame_list)  # Preallocate list to improve speed - number of dataframes is equal to that of video frames
-        for idx, frame_number in enumerate(frame_list):  # Iterate through every video frame in the dataframe - frame enumeration starts at 1
-            self.df_list[idx] = self.df[np.in1d(self.df["frame"].values, [frame_number])]  # Select rows of dataframe with df["frame"] == frame_number
-        return self.df_list
+        print("Number of frames to be sampled is {}".format(self.total_frame_number))
 
-    def get_df_direction_list(self):
-        '''
-        Separates vehicles in frames according to the direction they are driving in.
-            Parameters:
-                None, inputs to the method are attributes of the class
-            Returns:
-                df_direction_list: a list of tuples - one tuple per every frame, with two elements: eastbound and westbound vehicles dataframes -.
-        '''
-        eastbound_vehicles = []  # contains the vehicle_id of every vehicle driving East
-        westbound_vehicles = []  # contains the vehicle_id of every vehicle driving West
-        for vehicle_id in self.static_info.keys():
-            self.longest_trajectory = (
-                self.static_info[vehicle_id]["traveledDistance"]
-                if self.longest_trajectory
-                < self.static_info[vehicle_id]["traveledDistance"]
-                else self.longest_trajectory
-            )  # get longest trajectory in dataset to calculate img scale factor
-            if self.static_info[vehicle_id]["drivingDirection"] == 2.0:
-                eastbound_vehicles.append(vehicle_id)
-            else:
-                westbound_vehicles.append(vehicle_id)
+        # Initialize lists to store grouped data
+        self.df_list = [None] * self.total_frame_number
+        self.df_direction_list = [None] * self.total_frame_number
+        # Iterate through frame groups and group by driving direction
+        for idx, (_, group) in enumerate(frame_groups):
+            self.df_list[idx] = group
+            dir_groups = group.groupby("drivingDirection")
+            # Check if "East" and "West" groups exist, create empty DataFrames if not
+            east_group = dir_groups.get_group("East") if "East" in dir_groups.groups else pd.DataFrame(columns=group.columns)
+            west_group = dir_groups.get_group("West") if "West" in dir_groups.groups else pd.DataFrame(columns=group.columns)
+            # Assign groups to the direction list
+            self.df_direction_list[idx] = [east_group, west_group]
+        # Calculate the longest traveled distance from static information
+        self.longest_trajectory = self.static_info["traveledDistance"].max()
 
-        self.df_direction_list = [None] * self.total_frame_number  # For every frame, save two dataframes - one for eastbound vehicles and one for westbound vehicles
-        dummy_east, dummy_west = None, None
-        for idx in range(len(self.df_list)):
-            dummy_east = self.df_list[idx][
-                [ident in eastbound_vehicles for ident in self.df_list[idx].id]
-            ]  # eastbound vehicles
-            dummy_west = self.df_list[idx][
-                [ident in westbound_vehicles for ident in self.df_list[idx].id]
-            ]  # westbound vehicles
-            self.df_direction_list[idx] = [dummy_east, dummy_west]
-        return self.df_direction_list
+        return self.df_list, self.df_direction_list
 
-    def get_vehicle_groups_from_frame(self, frame):
-        '''
-        Given a frame, it creates a list in which every element is a dataframe with an ego vehicle and all those vehicles that are less closer than a predetermined distance away.
-        The length of the list is the number of vehicles that are present in the frame.
+    def get_historical_vehicle_aggregations(self, bubble_radius=50.0, lookback_window=2, frame_step=1):
+        """
+        Get historical vehicle aggregations for each ego vehicle in frames.
 
-        TODO: dynamic distance threshold - set to 50m at the time.
-            Parameters:
-                Frame: a dataframe containing information of a specific frame - see get_df_list and get_df_direction_list for details
-            Returns:
-                group_df_list: a list in which every element contains a vehicle group in the dataframe form
-        '''
-        group_df_list = [None]*len(frame) #for every vehicle in the frame we will save a list of dataframes in which a vehicle group is represented
-        drop_index_list = []
+        Args:
+            bubble_radius (float): Radius of the bubble around the ego vehicle (default: 50 meters).
+            lookback_window (int): Number of frames to look back (default: 2).
+            frame_step (int): Spacing between frame indices (default: 1).
 
-        for i ,(index, vehicle_id) in enumerate(frame.iterrows()): #iterate through every vehicle in the frame - returns index of entry and pd.Series with entry
-            t1 = (vehicle_id.x, vehicle_id.y, vehicle_id.width, vehicle_id.height) #get position data of ego vehicle
-            new_frame = frame.drop([index], axis = 0) #drop ego vehicle to not compare against itself
-            drop_index_list.clear() #clear drop index list - it is faster to allocate it outside the loop than to create it in every iteration
-            for index_local,vehicle_id_local in new_frame.iterrows(): #compare the ego vehicle against every vehicle in frame
-                t2 = (vehicle_id_local.x, vehicle_id_local.y, vehicle_id_local.width, vehicle_id_local.height) #get position data of other vehicles
-                if self.get_distance_between_vehicles(t1, t2) > 50: #if other vehicle is more than 50m away
-                    drop_index_list.append(index_local) #store vehicles that are further than 50 m away
-            new_frame = frame.drop(drop_index_list, axis = 0) #drop vehicles from dataframe
-            index_list = list(new_frame.index) #get indices that were not dropped in a list
-            index_list.remove(index) #remove the ego vehicle
-            index_list.insert(0, index) #insert the ego vehicle in first place
-            new_frame = new_frame.loc[index_list] #reorder the dataframe
-            group_df_list[i] = new_frame #store filtered dataframe in list of frame groups
+        Returns:
+            dataframe: A dataframe, containing every historical vehicle aggregation identified with an index.
+        """
+        def in_bubble(ego_vehicle, x, radius = bubble_radius):
+            '''
+            Gets the distance between two vehicles.
+            Notation: 
+                (x, y) - coordinates of the top left corner of the bounding box of the vehicle.
+                (w, h) - width and height of the bounding box.
 
-        return group_df_list
-    
-    def get_vehicle_groups(self):
-        '''
-        Given a list of frames, it creates the vehicle groups associated to them by calling get_vehicle_groups_from_frame.
+                Parameters:
+                    ego_vehicle: dataframe row with information about the ego vehicle
+                    x: dataframe row with information about the vehicle to consider
+                Returns:
+                    dist: distance between vehicles
+            '''
 
-            Parameters:
-                None, inputs to this method are attributes of the class
-            Returns:
-                vehicle groups: a list in which every element is another list. The elements of the inner list are dataframes in which the information of a vehicle group is stored
-        '''
-        self.vehicle_groups = [None] * 2 * self.total_frame_number #preallocate for speed
-        #get vehicle groups of eastbound vehicles
-        for i in range(self.total_frame_number):
-            frame = self.df_direction_list[i][0]
-            self.vehicle_groups[i] = self.get_vehicle_groups_from_frame(frame)
-            frame = self.df_direction_list[i][1]
-            self.vehicle_groups[i+self.total_frame_number] = self.get_vehicle_groups_from_frame(frame)
-        return self.vehicle_groups
-    
-    def save_vehicle_groups(self):
+            x1, y1, w1, h1 = ego_vehicle.x, ego_vehicle.y, ego_vehicle.width, ego_vehicle.height
+            x2, y2, w2, h2 = x.x, x.y, x.width, x.height
+            c1 = np.array([x1 + w1/2, y1 + h1/2])
+            c2 = np.array([x2 + w2/2, y2 + h2/2])
+            dist = np.linalg.norm(c1-c2)
+
+            return dist < radius
+        
+        eastbound_frames = [direction[0] for direction in self.df_direction_list]
+        westbound_frames = [direction[1] for direction in self.df_direction_list]
+        historical_aggregations = pd.DataFrame(columns = eastbound_frames[0].columns)
+        historical_aggregation_index = 1
+        
+        for frame_df in eastbound_frames[lookback_window::frame_step]:
+            if len(frame_df) < 1: continue
+            idx = frame_df.frame.iloc[0]
+            past_frames_idx = [idx-i for i in range(lookback_window+1)]
+            for _, ego_vehicle in frame_df.iterrows():
+                historical_group = pd.DataFrame(columns=frame_df.columns)
+                for iter_frame in [eastbound_frames[i] for i in past_frames_idx[::-1]]:
+                    if ego_vehicle.id in iter_frame.id.tolist(): #If the ego vehicle is not in previous frame, use current position
+                        ego_vehicle = iter_frame[iter_frame.id == ego_vehicle.id].iloc[0]
+                    iter_frame = iter_frame.drop(iter_frame.index[iter_frame["id"] == ego_vehicle.id].tolist(), axis = 'index') #drop ego vehicle from calculations
+                    mask = iter_frame.apply((lambda x: in_bubble(ego_vehicle, x, radius=50)), axis = 1)
+                    historical_group = pd.concat([historical_group, pd.DataFrame(ego_vehicle).T, iter_frame[mask]], axis = 0)
+                historical_group['historical_aggregation_index'] = historical_aggregation_index
+                historical_aggregation_index += 1
+                historical_aggregations = pd.concat([historical_aggregations, historical_group])
+
+        for frame_df in westbound_frames[lookback_window::frame_step]:
+            if len(frame_df) < 1: continue
+            idx = frame_df.frame.iloc[0]
+            past_frames_idx = [idx-i for i in range(lookback_window+1)]
+            for _, ego_vehicle in frame_df.iterrows():
+                historical_group = pd.DataFrame(columns=frame_df.columns)
+                for iter_frame in [eastbound_frames[i] for i in past_frames_idx[::-1]]:
+                    if ego_vehicle.id in iter_frame.id.tolist(): #If the ego vehicle is not in previous frame, use current position
+                        ego_vehicle = iter_frame[iter_frame.id == ego_vehicle.id].iloc[0]
+                    iter_frame = iter_frame.drop(iter_frame.index[iter_frame["id"] == ego_vehicle.id].tolist(), axis = 'index') #drop ego vehicle from calculations
+                    mask = iter_frame.apply((lambda x: in_bubble(ego_vehicle, x, radius=50)), axis = 1)
+                    historical_group = pd.concat([historical_group, pd.DataFrame(ego_vehicle).T, iter_frame[mask]], axis = 0)
+                historical_group['historical_aggregation_index'] = historical_aggregation_index
+                historical_aggregation_index += 1
+                historical_aggregations = pd.concat([historical_aggregations, historical_group])
+
+        self.historical_aggregations = historical_aggregations.astype({"historical_aggregation_index": int})
+        return self.historical_aggregations
+
+    def save_vehicle_groups(self, path):
         """
         Saves the vehicle groups that were extracted from frame information into a csv file in the location of the dataset.
-
             Parameters:
-                None, inputs to this method are attributes of the class.
+                path: directory in which to save the csv file of the dataframe
             Returns:
                 None.
         """
-        file_path = self.dataset_location + str(self.dataset_index).zfill(2) + "_groups.csv"
+        file_path = path + "/" + str(self.dataset_index).zfill(2) + "_groups.csv"
         if os.path.exists(file_path): #if the file already exists, we need to erase it to avoid duplicity
             print("File " + file_path + " already exists. Deleting...")
             os.remove(file_path)
-        self.vehicle_groups_flat = [group for frame in self.vehicle_groups for group in frame] #flatten the vehicle groups list
+        print(f"Saving to: {file_path}")
         with open(file_path, 'a') as f: #write the dataframes on the corresponding file
-            for df in self.vehicle_groups_flat:
-                df.to_csv(f, index=True, index_label='Index')
-                f.write("\n")
+            self.historical_aggregations.to_csv(f, index=True, index_label='Index')
         
     
     def plot_frame(self, frame_number=None):
@@ -234,12 +228,7 @@ class SceneData:
 
         for index, vehicle in eastbound_df.iterrows():
             rect = Rectangle(
-                (
-                    int(vehicle.x * self.bg_image_scaling_factor),
-                    int(vehicle.y * self.bg_image_scaling_factor),
-                ),
-                int(vehicle.width * self.bg_image_scaling_factor),
-                int(vehicle.height * self.bg_image_scaling_factor),
+                (int(vehicle.x * self.bg_image_scaling_factor), int(vehicle.y * self.bg_image_scaling_factor)), int(vehicle.width * self.bg_image_scaling_factor), int(vehicle.height * self.bg_image_scaling_factor),
                 linewidth=1,
                 edgecolor="r",
                 facecolor="none",
@@ -247,14 +236,9 @@ class SceneData:
             ax.add_patch(rect)
         for index, vehicle in westbound_df.iterrows():
             rect = Rectangle(
-                (
-                    int(vehicle.x * self.bg_image_scaling_factor), #x
-                    int(vehicle.y * self.bg_image_scaling_factor), #y
-                ),
-                int(vehicle.width * self.bg_image_scaling_factor), #width
-                int(vehicle.height * self.bg_image_scaling_factor), #height
+                (int(vehicle.x * self.bg_image_scaling_factor), int(vehicle.y * self.bg_image_scaling_factor)), int(vehicle.width * self.bg_image_scaling_factor), int(vehicle.height * self.bg_image_scaling_factor),
                 linewidth=1,
-                edgecolor="g",
+                edgecolor="r",
                 facecolor="none",
             )
             ax.add_patch(rect)
@@ -275,12 +259,7 @@ class SceneData:
         eastbound_df, westbound_df = self.df_direction_list[frame_number]
         for index, vehicle in eastbound_df.iterrows():
             rect = Rectangle(
-                (
-                    int(vehicle.x * self.bg_image_scaling_factor),
-                    int(vehicle.y * self.bg_image_scaling_factor),
-                ),
-                int(vehicle.width * self.bg_image_scaling_factor),
-                int(vehicle.height * self.bg_image_scaling_factor),
+                (int(vehicle.x * self.bg_image_scaling_factor), int(vehicle.y * self.bg_image_scaling_factor)), int(vehicle.width * self.bg_image_scaling_factor), int(vehicle.height * self.bg_image_scaling_factor),
                 linewidth=1,
                 edgecolor="r",
                 facecolor="none",
@@ -288,14 +267,9 @@ class SceneData:
             ax.add_patch(rect)
         for index, vehicle in westbound_df.iterrows():
             rect = Rectangle(
-                (
-                    int(vehicle.x * self.bg_image_scaling_factor),
-                    int(vehicle.y * self.bg_image_scaling_factor),
-                ),
-                int(vehicle.width * self.bg_image_scaling_factor),
-                int(vehicle.height * self.bg_image_scaling_factor),
+                (int(vehicle.x * self.bg_image_scaling_factor), int(vehicle.y * self.bg_image_scaling_factor)), int(vehicle.width * self.bg_image_scaling_factor), int(vehicle.height * self.bg_image_scaling_factor),
                 linewidth=1,
-                edgecolor="g",
+                edgecolor="r",
                 facecolor="none",
             )
             ax.add_patch(rect)
@@ -319,14 +293,9 @@ class SceneData:
 
         for index, vehicle in group_df.iterrows():
             rect = Rectangle(
-                (
-                    int(vehicle.x * self.bg_image_scaling_factor),
-                    int(vehicle.y * self.bg_image_scaling_factor),
-                ),
-                int(vehicle.width * self.bg_image_scaling_factor),
-                int(vehicle.height * self.bg_image_scaling_factor),
+                (int(vehicle.x * self.bg_image_scaling_factor), int(vehicle.y * self.bg_image_scaling_factor)), int(vehicle.width * self.bg_image_scaling_factor), int(vehicle.height * self.bg_image_scaling_factor),
                 linewidth=1,
-                edgecolor="b",
+                edgecolor="r",
                 facecolor="none",
             )
             ax.add_patch(rect)
@@ -351,24 +320,26 @@ class SceneData:
 
         if save_animation:
             writer = animation.PillowWriter(
-                fps=scene_data.video_info["frameRate"] * speed_up_factor,
+                fps=self.video_info["frameRate"] * speed_up_factor,
                 metadata=dict(artist="Me"),
                 bitrate=900,
             )
-            anim.save("test.gif", writer=writer)
+            self.anim.save("test.gif", writer=writer)
         # plt.show()
         return self.anim
-
-   
+ 
 def main():
     if platform == 'darwin':
         dataset_location = "/Users/lmiguelmartinez/Tesis/datasets/highD/data/"
     else:
         dataset_location = "/home/lmmartinez/Tesis/datasets/highD/data/"
     sampling_period = 1000
-    df = pd.DataFrame(columns=['Loading', 'Get groups', 'Save groups', 'Frames', 'Groups'])
+    df = pd.DataFrame(columns=['Loading', 'Get groups', 'Save groups', 'Frames', 'Groups', 'Bubble radius', 'Frame Step', 'Frame Lookback'])
 
     row_list = []
+    lookback_window = 8
+    frame_step = 8
+    bubble_radius = 50
 
     for dataset_index in range(1,61):
         print("Loading data - File " + str(dataset_index).zfill(2))
@@ -379,16 +350,16 @@ def main():
         print("Total number of frames is: {}".format(scene_data.total_frame_number))
         print("Extracting groups")
         p3 = time()
-        vehicle_groups = scene_data.get_vehicle_groups()
+        vehicle_groups = scene_data.get_historical_vehicle_aggregations(bubble_radius=bubble_radius, lookback_window=4, frame_step=8)
         p4 = time()
         print("Groups extracted - Time elapsed is: {} seconds".format(p4-p3))
         print("Saving to csv")
         p5 = time()
-        scene_data.save_vehicle_groups()
+        scene_data.save_vehicle_groups(path='/home/lmmartinez/Tesis/datasets/highD/groups_historic_1000ms')
         p6 = time()
-        print("Groups saved - Time elapsed is: {} seconds".format(p5-p6))
-        print("Total number of groups is: {}".format(len(scene_data.vehicle_groups_flat)))
-        row_list.append([p2-p1, p4-p3, p6-p5, scene_data.total_frame_number, len(scene_data.vehicle_groups_flat)])
+        print("Groups saved - Time elapsed is: {} seconds".format(p6-p5))
+        print("Total number of groups is: {}".format(len(vehicle_groups.groupby('historical_aggregation_index'))))
+        row_list.append([p2-p1, p4-p3, p6-p5, scene_data.total_frame_number, len(vehicle_groups.groupby('historical_aggregation_index')), bubble_radius, frame_step, lookback_window])
 
     df = pd.concat([df, pd.DataFrame(row_list, columns = df.columns)])
     df.to_csv(dataset_location + 'computation_info_' + str(sampling_period) + 'ms.csv', index=True, index_label='File')
