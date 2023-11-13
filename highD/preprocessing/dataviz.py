@@ -98,8 +98,6 @@ class SceneData:
         frame_df.frame = frame_df.frame.astype(int)
         # Group vehicles by frame
         frame_groups = frame_df.groupby("frame")
-        print("Frame step is {}".format(self.frame_step))
-        print("Number of frames to be sampled is {}".format(self.total_frame_number))
 
         # Initialize lists to store grouped data
         self.df_list = [None] * self.total_frame_number
@@ -359,6 +357,9 @@ def main():
         p6 = time()
         print("Groups saved - Time elapsed is: {} seconds".format(p6-p5))
         print("Total number of groups is: {}".format(len(vehicle_groups.groupby('historical_aggregation_index'))))
+        print("")
+        print("______________________________________________")
+        print("")
         row_list.append([p2-p1, p4-p3, p6-p5, scene_data.total_frame_number, len(vehicle_groups.groupby('historical_aggregation_index')), bubble_radius, frame_step, lookback_window])
 
     df = pd.concat([df, pd.DataFrame(row_list, columns = df.columns)])
