@@ -186,29 +186,4 @@ def read_meta_info(input_path):
     }
     return extracted_meta_dictionary
 
-def read_groups(input_path):
-    """
-    Given a path to a groups.csv file, extracts a list in which every element is a dataframe that contains information to a vehicle group
-        Parameters:
-            input_path: path to the csv file that contains the group dataframes
-        Returns:
-            smaller_dfs: list of dataframes
-    """
-    read_df = pandas.read_csv(input_path)
-
-    # Find the indices where the incorrect values are located
-    nan_indices = read_df.index[read_df['Index'] == "Index"].tolist()
-    # Initialize an empty list to store the smaller DataFrames
-    smaller_dfs = [None]*len(nan_indices)
-    # Split the DataFrame based on the NaN indices
-    start = 0
-    for index, end in enumerate(nan_indices):
-        smaller_df = read_df.iloc[start:end]
-        smaller_df = smaller_df.set_index('Index') #Set the index column as index
-        smaller_dfs[index] = (smaller_df)
-        start = end + 1  # Set the start index for the next iteration
-    smaller_df = read_df.iloc[start:]
-    smaller_dfs.append(smaller_df)
-
-    return smaller_dfs
 
