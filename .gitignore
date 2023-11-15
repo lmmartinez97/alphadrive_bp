@@ -164,3 +164,6 @@ cython_debug/
 *.tar
 *.7z
 *.rar
+
+### computation benchmarking info
+computation_info*
