@@ -98,6 +98,8 @@ class SceneData:
         frame_df.frame = frame_df.frame.astype(int)
         # Group vehicles by frame
         frame_groups = frame_df.groupby("frame")
+        print("Frame step is {}".format(self.frame_step))
+        print("Number of frames to be sampled is {}".format(self.total_frame_number))
 
         # Initialize lists to store grouped data
         self.df_list = [None] * self.total_frame_number
@@ -154,6 +156,8 @@ class SceneData:
         westbound_frames = [direction[1] for direction in self.df_direction_list]
         historical_aggregations = pd.DataFrame(columns = eastbound_frames[0].columns)
         historical_aggregation_index = 1
+
+        flag = 0
         
         for frame_df in eastbound_frames[lookback_window::frame_step]:
             if len(frame_df) < 1: continue
@@ -162,11 +166,17 @@ class SceneData:
             for _, ego_vehicle in frame_df.iterrows():
                 historical_group = pd.DataFrame(columns=frame_df.columns)
                 for iter_frame in [eastbound_frames[i] for i in past_frames_idx[::-1]]:
-                    if ego_vehicle.id in iter_frame.id.tolist(): #If the ego vehicle is not in previous frame, use current position
+                    if ego_vehicle.id in iter_frame.id.tolist(): #If the ego vehicle is not in previous frame, discard calculation
                         ego_vehicle = iter_frame[iter_frame.id == ego_vehicle.id].iloc[0]
+                    else:
+                        flag = 1 #flag to discard current ego vehicle
+                        break
                     iter_frame = iter_frame.drop(iter_frame.index[iter_frame["id"] == ego_vehicle.id].tolist(), axis = 'index') #drop ego vehicle from calculations
                     mask = iter_frame.apply((lambda x: in_bubble(ego_vehicle, x, radius=50)), axis = 1)
                     historical_group = pd.concat([historical_group, pd.DataFrame(ego_vehicle).T, iter_frame[mask]], axis = 0)
+                if flag == 1:
+                    flag = 0
+                    continue
                 historical_group['historical_aggregation_index'] = historical_aggregation_index
                 historical_aggregation_index += 1
                 historical_aggregations = pd.concat([historical_aggregations, historical_group])
@@ -178,11 +188,17 @@ class SceneData:
             for _, ego_vehicle in frame_df.iterrows():
                 historical_group = pd.DataFrame(columns=frame_df.columns)
                 for iter_frame in [eastbound_frames[i] for i in past_frames_idx[::-1]]:
-                    if ego_vehicle.id in iter_frame.id.tolist(): #If the ego vehicle is not in previous frame, use current position
+                    if ego_vehicle.id in iter_frame.id.tolist(): #If the ego vehicle is not in previous frame, discard calculation
                         ego_vehicle = iter_frame[iter_frame.id == ego_vehicle.id].iloc[0]
+                    else:
+                        flag = 1 #flag to discard current ego vehicle
+                        break
                     iter_frame = iter_frame.drop(iter_frame.index[iter_frame["id"] == ego_vehicle.id].tolist(), axis = 'index') #drop ego vehicle from calculations
                     mask = iter_frame.apply((lambda x: in_bubble(ego_vehicle, x, radius=50)), axis = 1)
                     historical_group = pd.concat([historical_group, pd.DataFrame(ego_vehicle).T, iter_frame[mask]], axis = 0)
+                if flag == 1:
+                    flag = 0
+                    continue
                 historical_group['historical_aggregation_index'] = historical_aggregation_index
                 historical_aggregation_index += 1
                 historical_aggregations = pd.concat([historical_aggregations, historical_group])
@@ -194,16 +210,21 @@ class SceneData:
         """
         Saves the vehicle groups that were extracted from frame information into a csv file in the location of the dataset.
             Parameters:
-                path: directory in which to save the csv file of the dataframe
+                None, inputs to this method are attributes of the class.
             Returns:
                 None.
         """
-        file_path = path + "/" + str(self.dataset_index).zfill(2) + "_groups.csv"
-        if os.path.exists(file_path): #if the file already exists, we need to erase it to avoid duplicity
-            print("File " + file_path + " already exists. Deleting...")
+        if not os.path.exists(path):
+            print(f"Directory {path} does not exist. Creating...")
+            os.makedirs(path)  # Create the directory if it doesn't exist
+        
+        file_path = os.path.join(path, f"{self.dataset_index:02d}_groups.csv")
+        if os.path.exists(file_path): # if the file already exists, we need to erase it to avoid duplicity
+            print(f"File {file_path} already exists. Deleting...")
             os.remove(file_path)
+        
         print(f"Saving to: {file_path}")
-        with open(file_path, 'a') as f: #write the dataframes on the corresponding file
+        with open(file_path, 'a') as f: # write the dataframes on the corresponding file
             self.historical_aggregations.to_csv(f, index=True, index_label='Index')
         
     
@@ -325,12 +346,18 @@ class SceneData:
             self.anim.save("test.gif", writer=writer)
         # plt.show()
         return self.anim
+
  
 def main():
+    target_path = 'Tesis/datasets/highD/groups_historic_1000ms/'
+    dataset_location = 'Tesis/datasets/highD/data/'
     if platform == 'darwin':
-        dataset_location = "/Users/lmiguelmartinez/Tesis/datasets/highD/data/"
+        dataset_location = '/Users/lmiguelmartinez/' + dataset_location
+        target_path = '/Users/lmiguelmartinez/' + target_path
     else:
-        dataset_location = "/home/lmmartinez/Tesis/datasets/highD/data/"
+        dataset_location = "/home/lmmartinez/" + dataset_location
+        target_path = "/home/lmmartinez/" + target_path
+        
     sampling_period = 1000
     df = pd.DataFrame(columns=['Loading', 'Get groups', 'Save groups', 'Frames', 'Groups', 'Bubble radius', 'Frame Step', 'Frame Lookback'])
 
@@ -353,7 +380,7 @@ def main():
         print("Groups extracted - Time elapsed is: {} seconds".format(p4-p3))
         print("Saving to csv")
         p5 = time()
-        scene_data.save_vehicle_groups(path='/home/lmmartinez/Tesis/datasets/highD/groups_historic_1000ms')
+        scene_data.save_vehicle_groups(target_path)      
         p6 = time()
         print("Groups saved - Time elapsed is: {} seconds".format(p6-p5))
         print("Total number of groups is: {}".format(len(vehicle_groups.groupby('historical_aggregation_index'))))
@@ -363,7 +390,7 @@ def main():
         row_list.append([p2-p1, p4-p3, p6-p5, scene_data.total_frame_number, len(vehicle_groups.groupby('historical_aggregation_index')), bubble_radius, frame_step, lookback_window])
 
     df = pd.concat([df, pd.DataFrame(row_list, columns = df.columns)])
-    df.to_csv(dataset_location + 'computation_info_' + str(sampling_period) + 'ms.csv', index=True, index_label='File')
+    df.to_csv(target_path + 'computation_info_' + str(sampling_period) + 'ms.csv', index=True, index_label='File')
 
 if __name__ == "__main__":
     main()

@@ -10,7 +10,8 @@ from rich import print
 from sys import platform
 from time import time
 
-from read_csv import read_groups
+import tqdm
+
 
 sns.set()
 sns.set_style("whitegrid")
@@ -31,62 +32,15 @@ class PotentialField:
         self.sx, self.sy = step_x, step_y
         self.df_group_list = df_group_list
 
-        self.grid = self.initialize_grid()
-        self.field_list = [None] * len(self.df_group_list)
-
-    def initialize_grid(self):
-        '''
-        Initializes a potential field grid and calculates the number of pixels that the final image will have.
-        
-        Parameters:
-                None
-            Returns:
-                A grid initialized to zero with size (num_y, num_x)
-        '''
-        #calculate grid size
         self.num_x = int(2*self.rx / self.sx) + 1
         self.num_y = int(2*self.ry / self.sy) + 1
         self.grid = np.zeros([self.num_y, self.num_x], dtype = np.float32) #x dimension is rows, y dimension is columns
         self.x_pos, self.y_pos = np.linspace(-self.rx, self.rx, self.num_x), np.linspace(-self.ry, self.ry, self.num_y) #x and y interchanged so x is the horizontal dimension, and y is the vertical dimension
         print("Initialized grid of shape: {}".format(self.grid.shape))
-        return self.grid
-
-    def group_to_list(self, group):
-        '''
-        Converts the group from dataframe to dictionary and casts every value to float for future manipulation.
-        
-        Parameters:
-                None
-            Returns:
-                A list of dictionaries in which each element contains the information of an entry of the dataframe. Order is preserved.
-        '''
-
-        self.vehicle_list = group.to_dict(orient='records')
-        for idx, vehicle in enumerate(self.vehicle_list):
-            for k, v in vehicle.items():
-                self.vehicle_list[idx][k] = float(v)
-        return self.vehicle_list
-
-    def get_field_value(self, x, y, a, b, c, k):
-        '''
-        Calculates the value of a potential field along two linespace inputs: x and y coordinates. 
-        See https://stackoverflow.com/a/22778484 for magic around empty dimensions - I still don't understand how, but it works.
-        
-        Parameters:
-                x, y: linespaces along which the field is calculated. Positions are relative to the vehicle that is being considered, 
-                      which is itself relative to the ego vehicle
-                k, a, b, c: parameters of the gaussian - amplitude and exponent coefficients. 
-                            The calculation of a, b and c is done from standard deviations and an angle of rotation
-            Returns:
-                A numpy array of size (num_y, num_x) in which each element is the value of the potential field evaluated 
-                in the corresponding coordinate of the input linespaces
-        '''
-        local_grid = k * np.exp(-(a * np.square(x[None,:]) + 2 * b * x[None,:] * y[:,None] + c * np.square(y[:,None])))
-        return local_grid
     
-    def calculate_field(self):
+    def calculate_field(self, inner_group, ego_vehicle):
         '''
-        Calculates the value of a potential field associated to an ego vehicle in the context of its group
+        Calculates the value of a potential field associated to an ego vehicle in the context of its group in a particular frame
         
         Parameters:
                 None
@@ -94,18 +48,51 @@ class PotentialField:
                 A numpy array of size (num_y, num_x) in which each element is the value of the potential field evaluated 
                 in the corresponding coordinate of the input linespaces
         '''
-        self.grid = np.zeros([self.num_y, self.num_x], dtype = np.float32) #x dimension is rows, y dimension is columns
-        for vehicle in self.vehicle_list:
-            x_rel = vehicle["x"] - self.x_ego
-            y_rel = - vehicle["y"] + self.y_ego #positive y direction points "downwards"
+        def get_field_value(x, y, a, b, c, k):
+            '''
+            Calculates the value of a potential field along two linespace inputs: x and y coordinates. 
+            See https://stackoverflow.com/a/22778484 for magic around empty dimensions - I still don't understand how, but it works.
+            
+            Parameters:
+                    x, y: linespaces along which the field is calculated. Positions are relative to the vehicle that is being considered, 
+                        which is itself relative to the ego vehicle
+                    k, a, b, c: parameters of the gaussian - amplitude and exponent coefficients. 
+                                The calculation of a, b and c is done from standard deviations and angle of rotation
+                Returns:
+                    A numpy array of size (num_y, num_x) in which each element is the value of the potential field evaluated 
+                    in the corresponding coordinate of the input linespaces
+            '''
+            local_grid = k * np.exp(-(a * np.square(x[None,:]) + 2 * b * x[None,:] * y[:,None] + c * np.square(y[:,None])))
+            return local_grid
+        
+        def calculate_parameters_and_field_value(ego_vehicle, vehicle):
+            '''
+            Calculates the parameters of the potential field associated to a particular vehicle in the context of a group.
+            Serves as a function call to the apply method of the dataframe that contains the information of the vehicles in the group in a particular frame.
+            
+            Parameters:
+                    ego_vehicle: instance of dataframe that contains the information of the ego vehicle in a particular frame.
+                    vehicle: vehicle which field is beign considered
+                Returns:
+            '''
+            x1, y1 = ego_vehicle.x, ego_vehicle.y
+            x2, y2, vx2, vy2, w2, h2 = vehicle.x, vehicle.y, vehicle.xVelocity, vehicle.yVelocity, vehicle.width, vehicle.height
+            x_rel = x2 - x1
+            y_rel = - y2 + y1 #positive y direction points "downwards"
             dx, dy = self.x_pos - x_rel, self.y_pos - y_rel
-            ang = np.arctan2(vehicle["xVelocity"], vehicle["yVelocity"])
-            sigma_y, sigma_x = vehicle["width"], vehicle["height"]/2
+            ang = np.arctan2(vx2, vy2)
+            sigma_y, sigma_x = w2, h2/2
             a = np.square(np.cos(ang)) / (2 * np.square(sigma_x)) + np.square(np.sin(ang)) / (2 * np.square(sigma_y))
             b = - np.sin(2 * ang) / (4 * np.square(sigma_x)) + np.sin(2 * ang) / (4 * np.square(sigma_y))
             c = np.square(np.sin(ang)) / (2 * np.square(sigma_x)) + np.square(np.cos(ang)) / (2 * np.square(sigma_y))
-            k = np.linalg.norm([vehicle["xVelocity"], vehicle["yVelocity"]])
-            self.grid = np.add(self.grid, self.get_field_value(dx, dy, a, b, c, k))
+            k = np.sqrt(np.linalg.norm((vehicle.xVelocity, vehicle.yVelocity)))
+            self.grid = np.add(self.grid, get_field_value(dx, dy, a, b, c, k))
+            return self.grid
+
+        self.grid = np.zeros([self.num_y, self.num_x], dtype = np.float32) #x dimension is rows, y dimension is columns
+        for _, row in inner_group.iterrows():
+            self.grid += calculate_parameters_and_field_value(ego_vehicle=ego_vehicle, vehicle=row)
+
         return self.grid
     
     def calculate_field_list(self):
@@ -115,22 +102,28 @@ class PotentialField:
         Parameters:
                 None
             Returns:
-                A list in which each element is the potential field representation of the associated group.
+                An np.array in which each element is the potential field representation of the associated group.
         '''
-        for idx, group in enumerate(self.df_group_list):
-            if not (idx%1000):
-                print("Processing group {} of {}".format(idx, len(self.df_group_list)))
-            self.vehicle_list = self.group_to_list(group)
-            self.vehicle_count = len(self.vehicle_list)
-            self.ego_vehicle = self.vehicle_list[0]
-            self.x_ego, self.y_ego = self.ego_vehicle["x"], self.ego_vehicle["y"]
-            self.field_list[idx] = self.calculate_field()
-        self.field_list = np.array(self.field_list, dtype = np.float32)
+        self.field_list = []
+        for idx, (_, group) in enumerate(self.df_group_list.groupby("historical_aggregation_index")):
+            if idx % 100 == 0:
+                print("Processing group {} of {}".format(idx, self.df_group_list["historical_aggregation_index"].nunique()))
+            group["frame"] = - group["frame"] + group["frame"].max() + 1 # determine relative frame step to atenuate distant values
+            #Current frame will have a value of 1, previous frame will have a value of 2, nth frame will have a value of n
+            ego_vehicle_id = group.iloc[0].id
+            temp_grid = np.zeros([self.num_y, self.num_x], dtype = np.float32) #x dimension is rows, y dimension is columns
+            for frame_number, inner_group in group.groupby("frame"): #add the field for every frame
+                frame_attenuation = 1/inner_group.iloc[0].frame
+                ego_vehicle = inner_group[inner_group["id"] == ego_vehicle_id].iloc[0]
+                if frame_number != 1:
+                    inner_group = inner_group[inner_group["id"] != ego_vehicle_id]
+                temp_grid = np.add(self.calculate_field(inner_group, ego_vehicle) * frame_attenuation, temp_grid)
+            self.field_list.append(temp_grid)
+        self.field_list = np.asarray(self.field_list)
 
         return self.field_list
     
     def save_to_hdf5(self, train_ratio, val_ratio, hdf5_file):
-
         """
         Split a list of NumPy arrays into train, validation, and test datasets and save them to an HDF5 file.
 
@@ -171,7 +164,7 @@ class PotentialField:
             hf.create_dataset("test", data=test_data)
             for key, value in metadata.items():
                 hf.attrs[key] = value
-    
+        
     def plot_field(self, idx = None):
         '''
         Plots a 3d graph and a heat map of the potential field of a given group in the variable idx.
@@ -181,7 +174,6 @@ class PotentialField:
             Returns:
                 None
         '''
-
         if idx is None:
             idx = np.random.randint(len(self.field_list))
         fig = plt.figure(figsize=(15, 8))
@@ -229,7 +221,7 @@ class PotentialField:
 
         plt.show()
 
-    def plot_heat_map(self):
+    def plot_heat_map(self, idx):
         '''
         Plots the heat map of the potential field of a given group in the variable idx.
         
@@ -241,33 +233,47 @@ class PotentialField:
         if idx is None:
             idx = np.random.randint(len(self.field_list))
         fig, ax = plt.subplots()
-        ax.imshow(self.self.field_list[idx])
+        ax.imshow(self.field_list[idx])
         ax.set_xlabel("Longitudinal axis (m)")
         ax.set_ylabel("Transversal axis (m)")
-        ax.set_title("Potential field heat map - Frame {}".format(int(self.ego_vehicle["frame"])))
+        ax.set_title(f"Potential field heat map - Frame {idx}")
         plt.show()
 
 
 def main():
+
+    target_path = 'Tesis/datasets/highD/images_historic_1000ms/'
+    dataset_location = 'Tesis/datasets/highD/groups_historic_1000ms/'
     if platform == 'darwin':
-        dataset_location = "/Users/lmiguelmartinez/Tesis/datasets/highD/groups_1000ms/"
+        dataset_location = '/Users/lmiguelmartinez/' + dataset_location
+        target_path = '/Users/lmiguelmartinez/' + target_path
     else:
-        dataset_location = "/home/lmmartinez/Tesis/datasets/highD/groups_1000ms/"
+        dataset_location = "/home/lmmartinez/" + dataset_location
+        target_path = "/home/lmmartinez/" + target_path
+
+    if not os.path.exists(target_path):
+        print("Creating target directory")
+        os.makedirs(target_path, exist_ok=True)
+    else:
+        print("Target directory already exists - saving files to {}".format(target_path))
+
     rx = 50 # horizontal semiaxis of ellipse to consider as ROI
     ry = 6 # vertical semiaxis of ellipse to consider as ROI
     sx = 0.5
     sy = 0.1
 
     for dataset_index in range(1,61):
+        print("-"*50)
+        print("")
         print("Importing group list {} of 60".format(dataset_index))
-        df_groups_list = read_groups(dataset_location + str(dataset_index).zfill(2) + "_groups.csv")
+        df_groups_list = pd.read_csv(dataset_location + str(dataset_index).zfill(2) + "_groups.csv")
         start = time()
         field = PotentialField(rx, ry, sx, sy, df_groups_list)
         field_list = field.calculate_field_list()
         end = time()
         print("Time taken is {}".format(end-start))
         print("The number of images generated is: {}".format(len(field_list)))
-        filename = '/home/lmmartinez/containers/tensorflow_gpu/Tesis/datasets/highD/images_int/' + str(dataset_index).zfill(2) + '_images.hdf5'
+        filename = target_path + str(dataset_index).zfill(2) + '_images.hdf5'
         if os.path.exists(filename):
             try:
                 os.remove(filename)
@@ -275,7 +281,7 @@ def main():
             except OSError as e:
                 print(f"Error deleting the file '{filename}': {e}")
         # File does not exist, continue with the program
-        print(f"File '{filename}' does not exist.")
+        print(f"File '{filename}' does not exist - saving to file.")
         field.save_to_hdf5(train_ratio=0.6, val_ratio=0.2, hdf5_file=filename)
 
 if __name__ == "__main__":
