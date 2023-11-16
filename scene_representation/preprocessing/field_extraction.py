@@ -36,7 +36,6 @@ class PotentialField:
         self.num_y = int(2*self.ry / self.sy) + 1
         self.grid = np.zeros([self.num_y, self.num_x], dtype = np.float32) #x dimension is rows, y dimension is columns
         self.x_pos, self.y_pos = np.linspace(-self.rx, self.rx, self.num_x), np.linspace(-self.ry, self.ry, self.num_y) #x and y interchanged so x is the horizontal dimension, and y is the vertical dimension
-        print("Initialized grid of shape: {}".format(self.grid.shape))
     
     def calculate_field(self, inner_group, ego_vehicle):
         '''
@@ -85,15 +84,15 @@ class PotentialField:
             a = np.square(np.cos(ang)) / (2 * np.square(sigma_x)) + np.square(np.sin(ang)) / (2 * np.square(sigma_y))
             b = - np.sin(2 * ang) / (4 * np.square(sigma_x)) + np.sin(2 * ang) / (4 * np.square(sigma_y))
             c = np.square(np.sin(ang)) / (2 * np.square(sigma_x)) + np.square(np.cos(ang)) / (2 * np.square(sigma_y))
-            k = np.sqrt(np.linalg.norm((vehicle.xVelocity, vehicle.yVelocity)))
-            self.grid = np.add(self.grid, get_field_value(dx, dy, a, b, c, k))
-            return self.grid
+            k = np.linalg.norm((vehicle.xVelocity, vehicle.yVelocity))
+            grid = get_field_value(dx, dy, a, b, c, k)
+            return grid
 
-        self.grid = np.zeros([self.num_y, self.num_x], dtype = np.float32) #x dimension is rows, y dimension is columns
+        grid = np.zeros([self.num_y, self.num_x], dtype = np.float32) #x dimension is rows, y dimension is columns
         for _, row in inner_group.iterrows():
-            self.grid += calculate_parameters_and_field_value(ego_vehicle=ego_vehicle, vehicle=row)
+            grid = np.add(grid, calculate_parameters_and_field_value(ego_vehicle=ego_vehicle, vehicle=row))
 
-        return self.grid
+        return grid
     
     def calculate_field_list(self):
         '''
@@ -106,17 +105,17 @@ class PotentialField:
         '''
         self.field_list = []
         for idx, (_, group) in enumerate(self.df_group_list.groupby("historical_aggregation_index")):
-            if idx % 100 == 0:
+            if not (idx%100):
                 print("Processing group {} of {}".format(idx, self.df_group_list["historical_aggregation_index"].nunique()))
             group["frame"] = - group["frame"] + group["frame"].max() + 1 # determine relative frame step to atenuate distant values
             #Current frame will have a value of 1, previous frame will have a value of 2, nth frame will have a value of n
             ego_vehicle_id = group.iloc[0].id
             temp_grid = np.zeros([self.num_y, self.num_x], dtype = np.float32) #x dimension is rows, y dimension is columns
             for frame_number, inner_group in group.groupby("frame"): #add the field for every frame
-                frame_attenuation = 1/inner_group.iloc[0].frame
+                frame_attenuation = np.exp(-0.65*(inner_group.iloc[0].frame -1))
                 ego_vehicle = inner_group[inner_group["id"] == ego_vehicle_id].iloc[0]
-                if frame_number != 1:
-                    inner_group = inner_group[inner_group["id"] != ego_vehicle_id]
+                # if frame_number != 1:
+                #     inner_group = inner_group[inner_group["id"] != ego_vehicle_id]
                 temp_grid = np.add(self.calculate_field(inner_group, ego_vehicle) * frame_attenuation, temp_grid)
             self.field_list.append(temp_grid)
         self.field_list = np.asarray(self.field_list)
@@ -196,7 +195,7 @@ class PotentialField:
         ax2d.set_title("Potential field heat map")
         fig.colorbar(img, orientation = 'horizontal', pad = 0.2)
 
-        fig.suptitle("Potential field representation")
+        fig.suptitle(f"Potential field representation - Frame {idx}")
         plt.show()
 
     def plot_center_field(self, idx):
@@ -217,7 +216,7 @@ class PotentialField:
         ax.plot(x, y)
         ax.set_xlabel("Transversal axis (m)")
         ax.set_ylabel("Potential field magnitude (-)")
-        ax.set_title("Ego vehicle longitudinal axis - Frame {}".format(int(self.ego_vehicle["frame"])))
+        ax.set_title(f"Ego longitudinal x axis - Frame {idx}")
 
         plt.show()
 
@@ -241,7 +240,6 @@ class PotentialField:
 
 
 def main():
-
     target_path = 'Tesis/datasets/highD/images_historic_1000ms/'
     dataset_location = 'Tesis/datasets/highD/groups_historic_1000ms/'
     if platform == 'darwin':
@@ -277,11 +275,12 @@ def main():
         if os.path.exists(filename):
             try:
                 os.remove(filename)
-                print(f"File '{filename}' has been deleted.")
+                print(f"File '{filename}' has been deleted. Recreating file.")
             except OSError as e:
-                print(f"Error deleting the file '{filename}': {e}")
+                print(f"Error deleting the file '{filename}': {e} - Overwriting file.")
         # File does not exist, continue with the program
-        print(f"File '{filename}' does not exist - saving to file.")
+        else:
+            print(f"File '{filename}' does not exist - saving to file.")
         field.save_to_hdf5(train_ratio=0.6, val_ratio=0.2, hdf5_file=filename)
 
 if __name__ == "__main__":
