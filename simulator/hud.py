@@ -1,10 +1,32 @@
 import datetime
+import glob
+import numpy as np
 import os
+import sys
 
 try:
     import pygame
 except ImportError:
     raise RuntimeError("cannot import pygame, make sure pygame package is installed")
+
+# ==============================================================================
+# -- Find CARLA module ---------------------------------------------------------
+# ==============================================================================
+try:
+    sys.path.append(
+        glob.glob(
+            "/home/lmmartinez/CARLA/PythonAPI/carla/dist/carla-*%d.%d-%s.egg"
+            % (
+                sys.version_info.major,
+                sys.version_info.minor,
+                "win-amd64" if os.name == "nt" else "linux-x86_64",
+            )
+        )[0]
+    )
+except IndexError:
+    pass
+import carla
+
 
 # ==============================================================================
 # -- FadingText ----------------------------------------------------------------
@@ -84,7 +106,7 @@ class HelpText(object):
 class HUD(object):
     """Class for HUD text"""
 
-    def __init__(self, width, height, text):
+    def __init__(self, width, height, text, draw_line=False):
         """Constructor method"""
         self.dim = (width, height)
         font = pygame.font.Font(pygame.font.get_default_font(), 20)
@@ -102,7 +124,8 @@ class HUD(object):
         self._show_info = True
         self._info_text = []
         self._server_clock = pygame.time.Clock()
-
+        self.draw_line = draw_line
+        
     def on_world_tick(self, timestamp):
         """Gets informations from the world at every tick"""
         self._server_clock.tick()
@@ -252,11 +275,12 @@ class HUD(object):
                     display.blit(surface, (8, v_offset))
                 v_offset += 18
         self._notifications.render(display)
-        pygame.draw.line(
-            display,
-            (255, 255, 0),
-            [display.get_width() / 2, 0],
-            [display.get_width() / 2, display.get_height()],
-            8,
-        )
+        if self.draw_line:
+            pygame.draw.line(
+                display,
+                (255, 255, 0),
+                [display.get_width() / 2, 0],
+                [display.get_width() / 2, display.get_height()],
+                8,
+            )
         self.help.render(display)

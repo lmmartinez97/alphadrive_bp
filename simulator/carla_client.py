@@ -159,14 +159,10 @@ class World(object):
             print("Please add some Vehicle Spawn Point to your UE4 scene.")
             sys.exit(1)
 
-        print("creating x spawn")
 
-        x_spawn_ego = np.random.uniform(low=-620, high=-580)
-        y_spawn_ego = -0.32727 * x_spawn_ego - 209.66
-        spawn_point_ego = carla.Transform(
-            carla.Location(x=x_spawn_ego, y=y_spawn_ego, z=0.1),
-            carla.Rotation(yaw=-15, pitch=0, roll=0),
-        )
+        # Spawn the player.
+        spawn_points = self.map.get_spawn_points()
+        spawn_point_ego = random.choice(spawn_points)
         self.player_ego = self.world.try_spawn_actor(
             self.blueprint_toyota_prius, spawn_point_ego
         )
@@ -224,7 +220,7 @@ class World(object):
         """Render world"""
         self.camera_manager.render(display)
         self.hud.render(display)
-        self.static_camera.render(display)
+        #self.static_camera.render(display)
 
     def destroy_sensors(self):
         """Destroy sensors"""
