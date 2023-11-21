@@ -11,16 +11,16 @@
 from __future__ import print_function
 
 import argparse
-import datetime
 import glob
 import logging
 import os
-import numpy.random as random
+import numpy
 import re
 import sys
 import traceback
 
 from rich import print
+from numpy import random
 
 
 try:
@@ -30,11 +30,6 @@ try:
     from pygame.locals import K_q
 except ImportError:
     raise RuntimeError("cannot import pygame, make sure pygame package is installed")
-
-try:
-    import numpy as np
-except ImportError:
-    raise RuntimeError("cannot import numpy, make sure numpy package is installed")
 
 # ==============================================================================
 # -- Find CARLA module ---------------------------------------------------------
@@ -55,13 +50,13 @@ except IndexError:
 import carla
 from carla import ColorConverter as cc
 
-from camera import CameraManager, StaticCamera
-from hud import HUD, get_actor_display_name
-from keyboard_control import KeyboardControl
-from logger import DataLogger
-from printers import print_blue, print_green, print_highlight, print_red
-from sensors import CollisionSensor, GnssSensor, LaneInvasionSensor
-from shared_mem import SharedMemory
+from modules.camera import CameraManager, StaticCamera
+from modules.hud import HUD, get_actor_display_name
+from modules.keyboard_control import KeyboardControl
+from modules.logger import DataLogger
+from modules.printers import print_blue, print_green, print_highlight, print_red
+from modules.sensors import CollisionSensor, GnssSensor, LaneInvasionSensor
+from modules.shared_mem import SharedMemory
 
 
 # ==============================================================================
