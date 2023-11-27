@@ -5,6 +5,7 @@ This repository contains the code associated to the PhD thesis _Behavior Plannin
 This section will be updated as the project is developed.
 
 As of 11/15/2023:
+'''bash
 scene_representation
 ├── preprocessing
 │   ├── group_extraction.ipynb
@@ -21,6 +22,7 @@ ui
 
 envs
 └── preprocessing.env
+'''
 
 ## Software requirements
 Python environments can be found within the envs directory. Any environment will be used to execute every file under the directory it shares its name with - i.e. the environment "preprocessing" can execute every notebook and script under /scene_representation/preprocessing.
