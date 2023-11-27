@@ -14,7 +14,7 @@ import argparse
 import glob
 import logging
 import os
-import numpy
+import numpy as np
 import re
 import sys
 import traceback
@@ -58,6 +58,9 @@ from modules.printers import print_blue, print_green, print_highlight, print_red
 from modules.sensors import CollisionSensor, GnssSensor, LaneInvasionSensor
 from modules.shared_mem import SharedMemory
 
+from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
+from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
+from agents.navigation.constant_velocity_agent import ConstantVelocityAgent  # pylint: disable=import-error
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
@@ -74,8 +77,14 @@ def find_weather_presets():
     presets = [x for x in dir(carla.WeatherParameters) if re.match("[A-Z].+", x)]
     return [(getattr(carla.WeatherParameters, x), name(x)) for x in presets]
 
+
 # ==============================================================================
-# -- World ---------------------------------------------------------------
+# -- Destination reached exception ---------------------------------------------
+# ==============================================================================
+
+
+# ==============================================================================
+# -- World ---------------------------------------------------------------------
 # ==============================================================================
 
 
@@ -86,7 +95,6 @@ class World(object):
         """Constructor method"""
         self._args = args
         self.world = carla_world
-
         self.delta_simulated = 0.05
 
         try:
@@ -98,7 +106,8 @@ class World(object):
             sys.exit(1)
 
         self.hud = hud
-        self.players = []
+        self.actor_list = []
+        self.sensor_list = []
         self.player_ego = None
         self.collision_sensor = None
         self.lane_invasion_sensor = None
@@ -112,8 +121,7 @@ class World(object):
         self.recording_enabled = False
         self.recording_start = 0
         self.blueprint_toyota_prius = None
-        self.blueprint_audi_a2 = None
-        self.blueprint_audi_tt = None
+
 
         settings = self.world.get_settings()
         settings.synchronous_mode = True
@@ -122,7 +130,6 @@ class World(object):
         settings.substepping = True
         settings.max_substep_delta_time = 0.01
         settings.max_substeps = int(self.delta_simulated * 100)
-
         self.world.apply_settings(settings)
         self.restart(args)
 
@@ -145,15 +152,10 @@ class World(object):
         self.blueprint_toyota_prius.set_attribute("role_name", "hero")
         self.blueprint_toyota_prius.set_attribute("color", "(11,166,86)")
 
-        self.blueprint_audi_a2 = random.choice(
-            self.world.get_blueprint_library().filter("vehicle.audi.a2")
-        )
-
         if not self.map.get_spawn_points():
             print("There are no spawn points available in your map/town.")
             print("Please add some Vehicle Spawn Point to your UE4 scene.")
             sys.exit(1)
-
 
         # Spawn the player.
         spawn_points = self.map.get_spawn_points()
@@ -163,6 +165,7 @@ class World(object):
         )
         self.modify_vehicle_physics(self.player_ego)
         print("Spawned ego vehicle")
+        self.world.tick()
 
         # Set up the sensors.
         self.collision_sensor = CollisionSensor(self.player_ego, self.hud)
@@ -172,6 +175,9 @@ class World(object):
         self.camera_manager = CameraManager(self.player_ego, self.hud)
         self.camera_manager.transform_index = cam_pos_id
         self.camera_manager.set_sensor(cam_index, notify=False)
+
+        self.actor_list.append(self.player_ego)
+        self.sensor_list.extend([self.collision_sensor.sensor, self.lane_invasion_sensor.sensor, self.gnss_sensor.sensor, self.camera_manager.sensor]) 
 
         # self.static_camera = StaticCamera(
         #     carla.Transform(
@@ -184,11 +190,8 @@ class World(object):
         # )
         # self.static_camera.set_sensor()
 
-        print("End sensors")
-
         actor_type = get_actor_display_name(self.player_ego)
         self.hud.notification(actor_type)
-        print("End restart")
 
     def next_weather(self, reverse=False):
         """Get next weather setting"""
@@ -196,7 +199,7 @@ class World(object):
         self._weather_index %= len(self._weather_presets)
         preset = self._weather_presets[self._weather_index]
         self.hud.notification("Weather: %s" % preset[1])
-        self.player.get_world().set_weather(preset[0])
+        self.player_ego.get_world().set_weather(preset[0])
 
     def modify_vehicle_physics(self, actor):
         # If actor is not a vehicle, we cannot use the physics control
@@ -207,9 +210,9 @@ class World(object):
         except Exception:
             pass
 
-    def tick(self, clock, episode_number, frame_number, decision_number):
+    def tick(self, clock, episode_number, frame_number):
         """Method for every tick"""
-        self.hud.tick(self, clock, episode_number, frame_number, decision_number)
+        self.hud.tick(self, clock, episode_number, frame_number)
 
     def render(self, display):
         """Render world"""
@@ -226,66 +229,65 @@ class World(object):
     def destroy(self):
         """Destroys all actors"""
 
-        # [print(actor.type_id) for actor in self.actor_list]
-        # print("=======")
-        # [print(sensor.type_id) for sensor in self.sensor_list]
-        # print("----------------")
-        # [sensor.destroy() for sensor in self.sensor_list]
-        # [actor.destroy() for actor in self.actor_list]
-        actors = [
-            self.camera_manager.sensor,
-            #self.static_camera.sensor,
-            self.collision_sensor.sensor,
-            self.lane_invasion_sensor.sensor,
-            self.gnss_sensor.sensor,
-        ]
+        [sensor.destroy() for sensor in self.sensor_list]
+        [actor.destroy() for actor in self.actor_list]
+        self.actor_list.clear()
+        self.sensor_list.clear()
 
-        # actors = actors + self.players
-        actors = actors + [self.player_ego]
-
-        for actor in actors:
-            if actor is not None:
-                actor.destroy()
+        # sensors = list(self.world.get_actors().filter("sensor.*"))
+        # [print(sensor.type_id, sensor.id) for sensor in sensors if sensor is not None]
+        # print("_" * 20)
+        # [sensor.destroy() for sensor in sensors]
+        # actors = list(self.world.get_actors().filter("vehicle.*"))
+        # [print(actor.type_id, actor.id) for actor in actors]
+        # [actor.destroy() for actor in actors if actor is not None]
 
         # self.players.clear()
         print("Finished destroying actors")
 
-def game_loop(args):
+def game_loop(args, episode_counter):
     """
     Main loop of the simulation. It handles updating all the HUD information,
     ticking the agent and, if needed, the world.
     """
     print("I'm in game loop")
 
-    sharedMemory = SharedMemory()
     ret = 0
 
     pygame.init()
     pygame.font.init()
     world = None
-    episode_number = 0
-    frame_number = 0
-    decision_number = 0
+    frame_counter = 0
 
     try:
         client = carla.Client(args.host, args.port)
         client.set_timeout(6.0)
 
+        #get traffic manager
+        traffic_manager = client.get_trafficmanager()
+        sim_world = client.get_world()
+        # apply settings
+        settings = sim_world.get_settings()
+        settings.synchronous_mode = True
+        settings.fixed_delta_seconds = 0.05
+        sim_world.apply_settings(settings)
+        traffic_manager.set_synchronous_mode(True)
+
+        #initialize display
         display = pygame.display.set_mode(
             (args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF
         )
-
         print("Created display")
 
+        #initialize hud and world
         hud = HUD(args.width, args.height, text = __doc__)
         print("Created hud")
-        carla_world = client.get_world()
-        print("Got world from client")
-        world = World(carla_world, hud, args)
+        world = World(sim_world, hud, args)
         print("Created world instance")
-        # Print waypoints in the map
+        
+        # Draw waypoints in the map
         if 0:
-            waypoints = world.map.generate_waypoints(0.5)
+            waypoints = world.map.generate_waypoints(0.05)
             for w in waypoints:
                 world.world.debug.draw_string(
                     w.transform.location,
@@ -298,42 +300,44 @@ def game_loop(args):
 
         controller = KeyboardControl(world)
 
-        clock = pygame.time.Clock()
-        # Traffic manager setting
-        print("Traffic manager")
-        traffic_manager = client.get_trafficmanager()
-        traffic_manager.set_synchronous_mode(True)
+        #initialize agent
+        if args.agent == "Basic":
+            agent = BasicAgent(world.player_ego, 30)
+            agent.follow_speed_limits(True)
+        elif args.agent == "Constant":
+            agent = ConstantVelocityAgent(world.player_ego, 30)
+            ground_loc = world.world.ground_projection(world.player_ego.get_location(), 5)
+            if ground_loc:
+                world.player.set_location(ground_loc.location + carla.Location(z=0.01))
+            agent.follow_speed_limits(True)
+        elif args.agent == "Behavior":
+            agent = BehaviorAgent(world.player_ego, behavior=args.behavior)
 
-        traffic_manager.vehicle_percentage_speed_difference(world.player_ego, 0)
-        traffic_manager.auto_lane_change(world.player_ego, False)
-        traffic_manager.distance_to_leading_vehicle(world.player_ego, 0)
-        traffic_manager.ignore_vehicles_percentage(world.player_ego, 100)
-        traffic_manager.ignore_lights_percentage(world.player_ego, 0)
-        world.player_ego.set_autopilot(True)
+        # Set the agent destination
+        spawn_points = world.map.get_spawn_points()
+        destination = random.choice(spawn_points).location
+        agent.set_destination(destination)
+        print("Spawn point is: ", world.player_ego.get_location())
+        print("Destination is: ", destination)
 
         prev_timestamp = world.world.get_snapshot().timestamp
-        prev_decision_timestamp = world.world.get_snapshot().timestamp
-        prev_acc_timestamp = world.world.get_snapshot().timestamp
         simulated_time = 0
 
-        # tick the world to update list of actors
-        world.world.tick()
-        # create instance of DataLogger()
-        logger = DataLogger(world.player_ego, world)
-        # vehicle_data, sensor_data = logger.log_data([world.player_ego, world.player, world.player_1])
-        vehicle_data, sensor_data = logger.log_data()
+        clock = pygame.time.Clock()
 
         while True:
+            clock.tick()
             timestamp = world.world.get_snapshot().timestamp
-            frame_number += 1
 
-            #wait for input
-            input("Press Enter to continue...")
             world.world.tick()
             # controller.parse_events()
-            world.tick(clock, episode_number, frame_number, decision_number)
+            world.tick(clock, episode_counter, frame_counter)
             world.render(display)
             pygame.display.flip()
+
+            if agent.done():
+                print("The target has been reached, stopping the simulation")
+                break
 
             simulated_time = (
                 simulated_time
@@ -341,31 +345,39 @@ def game_loop(args):
                 - prev_timestamp.elapsed_seconds
             )
 
+            control = agent.run_step()
+            control.manual_gear_shift = False
+            world.player_ego.apply_control(control)
+
             prev_timestamp = timestamp
+            frame_counter+= 1
 
     except KeyboardInterrupt as e:
-        sharedMemory.clean()
-
+        print("\n")
         if world is not None:
+            settings = world.world.get_settings()
+            settings.synchronous_mode = False
+            settings.fixed_delta_seconds = None
+            world.world.apply_settings(settings)
             world.destroy()
-
+            world = None
         pygame.quit()
-
         return -1
 
     except Exception as e:
         print(traceback.format_exc())
 
     finally:
-        sharedMemory.clean()
-
         if world is not None:
+            settings = world.world.get_settings()
+            settings.synchronous_mode = False
+            settings.fixed_delta_seconds = None
+            world.world.apply_settings(settings)
             world.destroy()
 
         print("Bye, bye")
-
         pygame.quit()
-        sys.exit()
+        return -1
 
 
 # ==============================================================================
@@ -461,12 +473,13 @@ def main():
     logging.info("listening to server %s:%s", args.host, args.port)
 
     print(__doc__)
-
+    episode_counter = 0
     try:
         while True:
-            ret = game_loop(args)
+            ret = game_loop(args, episode_counter)
             if ret:
                 sys.exit()
+            episode_counter += 1
 
     except KeyboardInterrupt:
         print("\nCancelled by user. Bye!")

@@ -133,7 +133,7 @@ class HUD(object):
         self.frame = timestamp.frame_count
         self.simulation_time = timestamp.elapsed_seconds
 
-    def tick(self, world, clock, episode_number, frame_number, decision_number):
+    def tick(self, world, clock, episode_number, frame_number):
         """HUD method for every tick"""
         self._notifications.tick(world, clock)
         if not self._show_info:
@@ -169,8 +169,7 @@ class HUD(object):
             % ("(% 2.6f, % 3.6f)" % (world.gnss_sensor.lat, world.gnss_sensor.lon)),
             "Height:  % 18.0f m" % transform.location.z,
             "Episode Number:  %d" % episode_number,
-            "Frame number:    %d" % frame_number,
-            "Decision number: %d" % decision_number,
+            "Frame number:    %d" % frame_number
         ]
         if isinstance(control, carla.VehicleControl):
             self._info_text += [

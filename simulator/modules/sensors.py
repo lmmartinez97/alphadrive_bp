@@ -3,7 +3,7 @@ import sys
 import glob
 import os
 import weakref
-
+import numpy as np
 # ==============================================================================
 # -- Find CARLA module ---------------------------------------------------------
 # ==============================================================================
@@ -22,6 +22,11 @@ except IndexError:
     pass
 import carla
 from carla import ColorConverter as cc
+
+def get_actor_display_name(actor, truncate=250):
+    """Method to get actor display name"""
+    name = " ".join(actor.type_id.replace("_", ".").title().split(".")[1:])
+    return (name[: truncate - 1] + "\u2026") if len(name) > truncate else name
 
 # ==============================================================================
 # -- CollisionSensor -----------------------------------------------------------
@@ -70,7 +75,7 @@ class CollisionSensor(object):
         actor_type = get_actor_display_name(event.other_actor)
         self.hud.notification("Collision with %r" % actor_type)
         impulse = event.normal_impulse
-        intensity = math.sqrt(impulse.x**2 + impulse.y**2 + impulse.z**2)
+        intensity = np.sqrt(impulse.x**2 + impulse.y**2 + impulse.z**2)
         self.history.append((event.frame, intensity))
         if len(self.history) > 4000:
             self.history.pop(0)
