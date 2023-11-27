@@ -6,22 +6,51 @@ This section will be updated as the project is developed.
 
 As of 11/15/2023:
 ```bash
-scene_representation
-├── preprocessing
-│   ├── group_extraction.ipynb
-│   ├── group_extraction.py
-│   ├── field_extraction.ipynb
-│   ├── field_extraction.py
-│   ├── read_csv.py
-└── training
-    ├── autoencoder_training.ipynb
-    └── saved_models
+├── envs
+│   └── preprocessing.env
+│   └── carla.env
+├── highD
+├── README.md
+├── scene_representation
+│   ├── preprocessing
+│   │   ├── field_extraction.ipynb
+│   │   ├── field_extraction.py
+│   │   ├── group_extraction.ipynb
+│   │   ├── group_extraction.py
+│   │   ├── __init__.py
+│   │   └── read_csv.py
+│   └── training
+│       ├── autoencoder_training.ipynb
+│       └── saved_models
+├── simulator
+│   ├── agents
+│   │   ├── __init__.py
+│   │   ├── navigation
+│   │   │   ├── basic_agent.py
+│   │   │   ├── behavior_agent.py
+│   │   │   ├── behavior_types.py
+│   │   │   ├── constant_velocity_agent.py
+│   │   │   ├── controller.py
+│   │   │   ├── global_route_planner.py
+│   │   │   ├── __init__.py
+│   │   │   ├── local_planner.py
+│   │   └── tools
+│   │       ├── __init__.py
+│   │       ├── misc.py
+│   ├── carla_client.py
+│   ├── modules
+│   │   ├── camera.py
+│   │   ├── hud.py
+│   │   ├── __init__.py
+│   │   ├── keyboard_control.py
+│   │   ├── logger.py
+│   │   ├── printers.py
+│   │   ├── sensors.py
+│   │   └── shared_mem.py
 
-ui
-└── README_ui.md -- EMPTY
+└── ui
+    └── README_ui.md
 
-envs
-└── preprocessing.env
 ```
 
 ## Software requirements
