@@ -11,12 +11,16 @@
 from __future__ import print_function
 
 import argparse
+from asyncore import loop
 import glob
+from hmac import new
 import logging
 import os
+from pdb import run
 import numpy as np
 import re
 import sys
+import time
 import traceback
 
 from rich import print
@@ -57,7 +61,7 @@ from modules.logger import DataLogger
 from modules.printers import print_blue, print_green, print_highlight, print_red
 from modules.sensors import CollisionSensor, GnssSensor, LaneInvasionSensor
 from modules.shared_mem import SharedMemory
-from modules.state_manager import VehicleState, StateManager
+from modules.state_manager import StateManager
 
 from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
 from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
@@ -109,7 +113,7 @@ class World(object):
         self.hud = hud
         self.actor_list = []
         self.sensor_list = []
-        self.player_ego = None
+        self.player = None
         self.collision_sensor = None
         self.lane_invasion_sensor = None
         self.gnss_sensor = None
@@ -162,23 +166,23 @@ class World(object):
         # Spawn the player.
         spawn_points = self.map.get_spawn_points()
         spawn_point_ego = random.choice(spawn_points)
-        self.player_ego = self.world.try_spawn_actor(
+        self.player = self.world.try_spawn_actor(
             self.blueprint_toyota_prius, spawn_point_ego
         )
-        self.modify_vehicle_physics(self.player_ego)
+        self.modify_vehicle_physics(self.player)
         print("Spawned ego vehicle")
         self.world.tick()
 
         # Set up the sensors.
-        self.collision_sensor = CollisionSensor(self.player_ego, self.hud)
-        self.lane_invasion_sensor = LaneInvasionSensor(self.player_ego, self.hud)
-        self.gnss_sensor = GnssSensor(self.player_ego)
+        self.collision_sensor = CollisionSensor(self.player, self.hud)
+        self.lane_invasion_sensor = LaneInvasionSensor(self.player, self.hud)
+        self.gnss_sensor = GnssSensor(self.player)
 
-        self.camera_manager = CameraManager(self.player_ego, self.hud)
+        self.camera_manager = CameraManager(self.player, self.hud)
         self.camera_manager.transform_index = cam_pos_id
         self.camera_manager.set_sensor(cam_index, notify=False)
 
-        self.actor_list.append(self.player_ego)
+        self.actor_list.append(self.player)
         self.sensor_list.extend([self.collision_sensor.sensor, self.lane_invasion_sensor.sensor, self.gnss_sensor.sensor, self.camera_manager.sensor]) 
 
         # self.static_camera = StaticCamera(
@@ -192,7 +196,7 @@ class World(object):
         # )
         # self.static_camera.set_sensor()
 
-        actor_type = get_actor_display_name(self.player_ego)
+        actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)
 
     def save_frame_state(self, frame_number):
@@ -221,7 +225,7 @@ class World(object):
         self._weather_index %= len(self._weather_presets)
         preset = self._weather_presets[self._weather_index]
         self.hud.notification("Weather: %s" % preset[1])
-        self.player_ego.get_world().set_weather(preset[0])
+        self.player.get_world().set_weather(preset[0])
 
     def modify_vehicle_physics(self, actor):
         # If actor is not a vehicle, we cannot use the physics control
@@ -307,73 +311,66 @@ def game_loop(args, episode_counter):
         world = World(sim_world, hud, args)
         print("Created world instance")
         
-        # Draw waypoints in the map
-        if 0:
-            waypoints = world.map.generate_waypoints(0.05)
-            for w in waypoints:
-                world.world.debug.draw_string(
-                    w.transform.location,
-                    "O",
-                    draw_shadow=False,
-                    color=carla.Color(r=255, g=0, b=0),
-                    life_time=120.0,
-                    persistent_lines=True,
-                )
-
         controller = KeyboardControl(world)
 
         #initialize agent
         if args.agent == "Basic":
-            agent = BasicAgent(world.player_ego, 30)
+            agent = BasicAgent(world.player, 30)
             agent.follow_speed_limits(True)
         elif args.agent == "Constant":
-            agent = ConstantVelocityAgent(world.player_ego, 30)
-            ground_loc = world.world.ground_projection(world.player_ego.get_location(), 5)
+            agent = ConstantVelocityAgent(world.player, 30)
+            ground_loc = world.world.ground_projection(world.player.get_location(), 5)
             if ground_loc:
                 world.player.set_location(ground_loc.location + carla.Location(z=0.01))
             agent.follow_speed_limits(True)
         elif args.agent == "Behavior":
-            agent = BehaviorAgent(world.player_ego, behavior=args.behavior)
+            agent = BehaviorAgent(world.player, behavior=args.behavior)
 
         # Set the agent destination
         spawn_points = world.map.get_spawn_points()
         destination = random.choice(spawn_points).location
         agent.set_destination(destination)
-        print("Spawn point is: ", world.player_ego.get_location())
+        print("Spawn point is: ", world.player.get_location())
         print("Destination is: ", destination)
 
         prev_timestamp = world.world.get_snapshot().timestamp
         simulated_time = 0
 
         clock = pygame.time.Clock()
+        frame_list = []
 
         while True:
             clock.tick()
             timestamp = world.world.get_snapshot().timestamp
-
+            #save simulation state
+            world.save_frame_state(frame_counter)
+            frame_list.append(frame_counter)
             world.world.tick()
             # controller.parse_events()
             world.tick(clock, episode_counter, frame_counter)
             world.render(display)
             pygame.display.flip()
 
-            if agent.done():
-                print("The target has been reached, stopping the simulation")
-                break
 
             simulated_time = (
                 simulated_time
                 + timestamp.elapsed_seconds
                 - prev_timestamp.elapsed_seconds
             )
-
             control = agent.run_step()
             control.manual_gear_shift = False
-            world.player_ego.apply_control(control)
-
+            world.player.apply_control(control)
             prev_timestamp = timestamp
             frame_counter+= 1
-
+            if agent.done():
+                print("The target has been reached, restarting from spawn point")
+                #return simulation to a random state in frame_list:
+                world.restore_frame_state(0)
+                frame_list.clear()
+                new_destination = random.choice(spawn_points).location
+                agent.set_destination(new_destination)
+                print("New destination is: ", new_destination)
+                
     except KeyboardInterrupt as e:
         print("\n")
         if world is not None:

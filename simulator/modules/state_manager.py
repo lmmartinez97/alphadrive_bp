@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import os
 import sys
 import glob
 
@@ -83,7 +84,7 @@ class StateManager:
             throttle=vehicle.get_control().throttle,
             brake=vehicle.get_control().brake,
             steer=vehicle.get_control().steer,
-            handbrake=vehicle.get_control().handbrake,
+            handbrake=vehicle.get_control().hand_brake,
             reverse=vehicle.get_control().reverse,
             manual_gear_shift=vehicle.get_control().manual_gear_shift,
             gear=vehicle.get_control().gear
@@ -106,23 +107,21 @@ class StateManager:
         if matching_states:
             state_to_restore = matching_states[0]  # Assuming there's only one match
             vehicle.set_location(state_to_restore.position)
-            vehicle.set_velocity(state_to_restore.velocity)
-            vehicle.set_acceleration(state_to_restore.acceleration)
+            vehicle.set_target_velocity(state_to_restore.velocity)
+            #vehicle.set_acceleration(state_to_restore.acceleration)
             vehicle.set_transform(
                 carla.Transform(state_to_restore.position, state_to_restore.rotation)
             )
-            vehicle.set_angular_velocity(state_to_restore.angular_velocity)
+            vehicle.set_target_angular_velocity(state_to_restore.angular_velocity)
             vehicle.apply_control(carla.VehicleControl(
                 throttle=state_to_restore.throttle,
                 brake=state_to_restore.brake,
                 steer=state_to_restore.steer,
-                handbrake=state_to_restore.handbrake,
+                hand_brake=state_to_restore.handbrake,
                 reverse=state_to_restore.reverse,
                 manual_gear_shift=state_to_restore.manual_gear_shift,
                 gear=state_to_restore.gear
-                # Set other necessary control attributes here
             ))
-            # Restore other necessary vehicle attributes here
         else:
             print(f"No matching VehicleState found for actor {vehicle.id} at frame {target_frame_number}")
             # Handle if no matching state is found (e.g., raise an exception or log a message)
