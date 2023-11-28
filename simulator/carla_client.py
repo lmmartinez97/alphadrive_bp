@@ -57,6 +57,7 @@ from modules.logger import DataLogger
 from modules.printers import print_blue, print_green, print_highlight, print_red
 from modules.sensors import CollisionSensor, GnssSensor, LaneInvasionSensor
 from modules.shared_mem import SharedMemory
+from modules.state_manager import VehicleState, StateManager
 
 from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
 from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
@@ -133,6 +134,7 @@ class World(object):
         self.world.apply_settings(settings)
         self.restart(args)
 
+        self.state_manager = StateManager()  # Creating StateManager instance
         print("World created")
 
     def restart(self, args):
@@ -192,6 +194,26 @@ class World(object):
 
         actor_type = get_actor_display_name(self.player_ego)
         self.hud.notification(actor_type)
+
+    def save_frame_state(self, frame_number):
+        """
+        Saves the state of all vehicles in the world at the specified frame number.
+
+        Args:
+            frame_number (int): The frame number when the state is recorded.
+        """
+        for vehicle in self.world.get_actors().filter("vehicle.*"):
+            self.state_manager.save_vehicle_state(vehicle, frame_number)
+
+    def restore_frame_state(self, frame_number):
+        """
+        Restores the state of all vehicles in the world to the specified frame.
+
+        Args:
+            frame_number (int): The frame number to restore the state.
+        """
+        for vehicle in self.world.get_actors().filter("vehicle.*"):
+            self.state_manager.restore_vehicle_state(vehicle, frame_number)
 
     def next_weather(self, reverse=False):
         """Get next weather setting"""
