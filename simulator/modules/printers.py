@@ -1,16 +1,21 @@
 from termcolor import cprint
 
-def print_red(dummy):
-    cprint(dummy, "red")
+def print_red(*args):
+    for arg in args:
+        cprint(arg, "red", end=' ')  # Using end=' ' to print all arguments on the same line
+    print()
 
+def print_green(*args):
+    for arg in args:
+        cprint(arg, "green", end=' ')  # Using end=' ' to print all arguments on the same line
+    print()
 
-def print_green(dummy):
-    cprint(dummy, "green")
+def print_highlight(*args):
+    for arg in args:
+        cprint(arg, "magenta", "on_white", end=' ')  # Using end=' ' to print all arguments on the same line
+    print()
 
-
-def print_highlight(dummy):
-    cprint(dummy, "magenta", "on_white")
-
-
-def print_blue(dummy):
-    cprint(dummy, "blue")
+def print_blue(*args):
+    for arg in args:
+        cprint(arg, "blue", end=' ')  # Using end=' ' to print all arguments on the same line
+    print()

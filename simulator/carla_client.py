@@ -131,7 +131,7 @@ class World(object):
         settings = self.world.get_settings()
         settings.synchronous_mode = True
         settings.fixed_delta_seconds = self.delta_simulated
-        settings.no_rendering_mode = False
+        settings.no_rendering_mode = True
         settings.substepping = True
         settings.max_substep_delta_time = 0.01
         settings.max_substeps = int(self.delta_simulated * 100)
@@ -164,8 +164,8 @@ class World(object):
             sys.exit(1)
 
         # Spawn the player.
-        spawn_points = self.map.get_spawn_points()
-        spawn_point_ego = random.choice(spawn_points)
+        self.spawn_points = self.map.get_spawn_points()
+        spawn_point_ego = random.choice(self.spawn_points)
         self.player = self.world.try_spawn_actor(
             self.blueprint_toyota_prius, spawn_point_ego
         )
@@ -199,15 +199,32 @@ class World(object):
         actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)
 
-    def save_frame_state(self, frame_number):
+    def record_frame_state(self, frame_number):
         """
         Saves the state of all vehicles in the world at the specified frame number.
 
         Args:
             frame_number (int): The frame number when the state is recorded.
         """
+        dict_list = []
         for vehicle in self.world.get_actors().filter("vehicle.*"):
-            self.state_manager.save_vehicle_state(vehicle, frame_number)
+            position=vehicle.get_location()
+            velocity=vehicle.get_velocity()
+            bounding_box = vehicle.bounding_box
+            state_dict = {
+            'actor_id': vehicle.actor_id,
+            'frame': frame_number,
+            'x': position.x,
+            'y': position.y,
+            'z': position.z,
+            'xVelocity': velocity.x,
+            'yVelocity': velocity.y,
+            'zVelocity': velocity.z,
+            'width': 2*bounding_box.extent.x,
+            'height': 2*bounding_box.extent.y,
+            }
+            dict_list.append(state_dict)
+        return pd.DataFrame.from_records(dict_list)
 
     def restore_frame_state(self, frame_number):
         """
@@ -271,133 +288,110 @@ class World(object):
         # self.players.clear()
         print("Finished destroying actors")
 
-def game_loop(args, episode_counter):
-    """
-    Main loop of the simulation. It handles updating all the HUD information,
-    ticking the agent and, if needed, the world.
-    """
-    print("I'm in game loop")
-
-    ret = 0
-
+def init_sim(args):
     pygame.init()
     pygame.font.init()
-    world = None
-    frame_counter = 0
 
-    try:
-        client = carla.Client(args.host, args.port)
-        client.set_timeout(6.0)
+    client = carla.Client(args.host, args.port)
+    client.set_timeout(6.0)
 
-        #get traffic manager
-        traffic_manager = client.get_trafficmanager()
-        sim_world = client.get_world()
-        # apply settings
-        settings = sim_world.get_settings()
-        settings.synchronous_mode = True
-        settings.fixed_delta_seconds = 0.05
-        sim_world.apply_settings(settings)
-        traffic_manager.set_synchronous_mode(True)
+    #get traffic manager
+    traffic_manager = client.get_trafficmanager()
+    sim_world = client.get_world()
+    # apply settings
+    settings = sim_world.get_settings()
+    settings.synchronous_mode = True
+    settings.fixed_delta_seconds = 0.05
+    sim_world.apply_settings(settings)
+    traffic_manager.set_synchronous_mode(True)
 
-        #initialize display
-        display = pygame.display.set_mode(
-            (args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF
-        )
-        print("Created display")
+    #initialize display
+    # display = pygame.display.set_mode(
+    #     (args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF
+    # )
+    # print("Created display")
 
-        #initialize hud and world
-        hud = HUD(args.width, args.height, text = __doc__)
-        print("Created hud")
-        world = World(sim_world, hud, args)
-        print("Created world instance")
-        
-        controller = KeyboardControl(world)
+    #initialize hud and world
+    hud = HUD(args.width, args.height, text = __doc__)
+    print("Created hud")
+    world = World(sim_world, hud, args)
+    print("Created world instance")
+    
+    controller = KeyboardControl(world)
 
-        #initialize agent
-        if args.agent == "Basic":
-            agent = BasicAgent(world.player, 30)
-            agent.follow_speed_limits(True)
-        elif args.agent == "Constant":
-            agent = ConstantVelocityAgent(world.player, 30)
-            ground_loc = world.world.ground_projection(world.player.get_location(), 5)
-            if ground_loc:
-                world.player.set_location(ground_loc.location + carla.Location(z=0.01))
-            agent.follow_speed_limits(True)
-        elif args.agent == "Behavior":
-            agent = BehaviorAgent(world.player, behavior=args.behavior)
+    #initialize agent
+    if args.agent == "Basic":
+        agent = BasicAgent(world.player, 30)
+        agent.follow_speed_limits(True)
+    elif args.agent == "Constant":
+        agent = ConstantVelocityAgent(world.player, 30)
+        ground_loc = world.world.ground_projection(world.player.get_location(), 5)
+        if ground_loc:
+            world.player.set_location(ground_loc.location + carla.Location(z=0.01))
+        agent.follow_speed_limits(True)
+    elif args.agent == "Behavior":
+        agent = BehaviorAgent(world.player, behavior=args.behavior)
 
-        # Set the agent destination
-        spawn_points = world.map.get_spawn_points()
-        destination = random.choice(spawn_points).location
-        agent.set_destination(destination)
-        print("Spawn point is: ", world.player.get_location())
-        print("Destination is: ", destination)
+    clock = pygame.time.Clock()
 
-        prev_timestamp = world.world.get_snapshot().timestamp
-        simulated_time = 0
+    return world, agent, clock
 
-        clock = pygame.time.Clock()
-        frame_list = []
+def init_episode(args, world, agent):
 
-        while True:
-            clock.tick()
-            timestamp = world.world.get_snapshot().timestamp
-            #save simulation state
-            world.save_frame_state(frame_counter)
-            frame_list.append(frame_counter)
-            world.world.tick()
-            # controller.parse_events()
-            world.tick(clock, episode_counter, frame_counter)
-            world.render(display)
-            pygame.display.flip()
+    # Set the agent destination
+    spawn_points = world.map.get_spawn_points()
+    destination = random.choice(spawn_points).location
+    agent.set_destination(destination)
+    print("Spawn point is: ", world.player.get_location())
+    print("Destination is: ", destination)
 
+    prev_timestamp = world.world.get_snapshot().timestamp
+    simulated_time = 0
 
-            simulated_time = (
-                simulated_time
-                + timestamp.elapsed_seconds
-                - prev_timestamp.elapsed_seconds
-            )
-            control = agent.run_step()
-            control.manual_gear_shift = False
-            world.player.apply_control(control)
-            prev_timestamp = timestamp
-            frame_counter+= 1
-            if agent.done():
-                print("The target has been reached, restarting from spawn point")
-                #return simulation to a random state in frame_list:
-                world.restore_frame_state(0)
-                frame_list.clear()
-                new_destination = random.choice(spawn_points).location
-                agent.set_destination(new_destination)
-                print("New destination is: ", new_destination)
-                
-    except KeyboardInterrupt as e:
-        print("\n")
-        if world is not None:
-            settings = world.world.get_settings()
-            settings.synchronous_mode = False
-            settings.fixed_delta_seconds = None
-            world.world.apply_settings(settings)
-            world.destroy()
-            world = None
-        pygame.quit()
-        return -1
+    frame_list = []
+    return frame_list, prev_timestamp
 
-    except Exception as e:
-        print(traceback.format_exc())
+def game_step(args, episode_counter, frame_counter, world, agent, clock, prev_timestamp):
+    
+    clock.tick()
+    timestamp = world.world.get_snapshot().timestamp
+    #save simulation state
+    world.save_frame_state(frame_counter)
 
-    finally:
-        if world is not None:
-            settings = world.world.get_settings()
-            settings.synchronous_mode = False
-            settings.fixed_delta_seconds = None
-            world.world.apply_settings(settings)
-            world.destroy()
+    world.world.tick()
+    # controller.parse_events()
+    world.tick(clock, episode_counter, frame_counter)
+    # world.render(display)
+    #pygame.display.flip()
 
-        print("Bye, bye")
-        pygame.quit()
-        return -1
+    control = agent.run_step()
+    control.manual_gear_shift = False
+    world.player.apply_control(control)
+    
+    if 1:
+        print()
+        print_green("Simulated time: ", timestamp.elapsed_seconds)
+        print_green("Simulated delta time: ", timestamp.delta_seconds)
+        print_red("Elapsed real time: ", timestamp.platform_timestamp - prev_timestamp.platform_timestamp)
+        print_red("FPS: ", 1/(timestamp.platform_timestamp - prev_timestamp.platform_timestamp + 1e-10))
+        print_green("Frame counter: ", frame_counter)
+        print("Agent state:")
+        print_blue("    Location: ", world.player.get_location())
+        print_blue("    Speed: ", world.player.get_velocity())
+        print_blue("    Control: ", world.player.get_control())
+    
+    prev_timestamp = timestamp
 
+    if agent.done():
+        print("The target has been reached, restarting from spawn point")
+        ret_step = -1
+        if episode_counter > 10:
+            ret_episode = -1
+    else:
+        ret_episode = 0
+        ret_step = 0
+
+    return ret_episode, ret_step, prev_timestamp
 
 # ==============================================================================
 # -- main() --------------------------------------------------------------
@@ -485,7 +479,7 @@ def main():
     args = argparser.parse_args()
 
     args.width, args.height = [int(x) for x in args.res.split("x")]
-
+    print(args)
     log_level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(format="%(levelname)s: %(message)s", level=log_level)
 
@@ -494,14 +488,42 @@ def main():
     print(__doc__)
     episode_counter = 0
     try:
-        while True:
-            ret = game_loop(args, episode_counter)
-            if ret:
-                sys.exit()
+        world, agent, clock = init_sim(args)
+        while ret_episode != -1:
+            prev_timestamp = init_episode(args, world, agent)
+            frame_counter = 0
+            while ret_step != -1:
+                ret_episode, ret_step = game_step(args, episode_counter, frame_counter, prev_timestamp, world, agent, clock, )
+                frame_counter += 1
             episode_counter += 1
+    
+    except KeyboardInterrupt as e:
+        print("\n")
+        if world is not None:
+            settings = world.world.get_settings()
+            settings.synchronous_mode = False
+            settings.fixed_delta_seconds = None
+            world.world.apply_settings(settings)
+            world.destroy()
+            world = None
+        pygame.quit()
+        return -1
 
-    except KeyboardInterrupt:
-        print("\nCancelled by user. Bye!")
+    except Exception as e:
+        print(traceback.format_exc())
+
+    finally:
+        if world is not None:
+            settings = world.world.get_settings()
+            settings.synchronous_mode = False
+            settings.fixed_delta_seconds = None
+            world.world.apply_settings(settings)
+            world.destroy()
+
+        print("Bye, bye")
+        pygame.quit()
+        return -1
+
 
 
 if __name__ == "__main__":
