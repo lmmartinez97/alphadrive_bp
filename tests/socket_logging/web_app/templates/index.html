@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Data Display</title>
+</head>
+<body>
+    <h1>Received Data</h1>
+    <div id="data-display">
+        <!-- Received data will be displayed here -->
+    </div>
+
+    <script>
+        function updateData() {
+            fetch('/data')  // Fetch data from the '/data' endpoint
+                .then(response => response.text())
+                .then(data => {
+                    // Update the content of the 'data-display' div with the received data
+                    document.getElementById('data-display').innerText = data;
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        // Update data every 2 seconds (for example)
+        setInterval(updateData, 2000);
+    </script>
+</body>
+</html>
+
