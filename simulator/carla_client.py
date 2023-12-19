@@ -17,6 +17,7 @@ import glob
 import json
 import logging
 import os
+from pty import spawn
 import numpy as np
 import pandas as pd
 import re
@@ -63,15 +64,19 @@ from modules.sensors import CollisionSensor, GnssSensor, LaneInvasionSensor
 from modules.shared_mem import SharedMemory
 from modules.state_manager import StateManager
 
-from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
+from agents.navigation.behavior_agent import (
+    BehaviorAgent,
+)  # pylint: disable=import-error
 from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
-from agents.navigation.constant_velocity_agent import ConstantVelocityAgent  # pylint: disable=import-error
+from agents.navigation.constant_velocity_agent import (
+    ConstantVelocityAgent,
+)  # pylint: disable=import-error
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
 # ==============================================================================
 
-log_host = '127.0.0.1'  # Replace with your server's IP address
+log_host = "127.0.0.1"  # Replace with your server's IP address
 log_port = 8888  # Replace with your server's port
 
 # ==============================================================================
@@ -114,7 +119,9 @@ class World(object):
         except RuntimeError as error:
             print("RuntimeError: {}".format(error))
             print("The server could not send the OpenDRIVE (.xodr) file:")
-            print("Make sure it exists, has the same name of your town, and is correct.")
+            print(
+                "Make sure it exists, has the same name of your town, and is correct."
+            )
             sys.exit(1)
 
         self.hud = hud
@@ -136,14 +143,13 @@ class World(object):
 
         self.dataframe = pd.DataFrame()
 
-
         settings = self.world.get_settings()
         settings.synchronous_mode = True
         settings.fixed_delta_seconds = self.delta_simulated
         settings.no_rendering_mode = True
         settings.substepping = True
         settings.max_substep_delta_time = 0.01
-        settings.max_substeps = int(self.delta_simulated * 100)
+        settings.max_substeps = int(self.delta_simulated * 50)
         self.world.apply_settings(settings)
         self.restart(args)
 
@@ -192,7 +198,14 @@ class World(object):
         self.camera_manager.set_sensor(cam_index, notify=False)
 
         self.actor_list.append(self.player)
-        self.sensor_list.extend([self.collision_sensor.sensor, self.lane_invasion_sensor.sensor, self.gnss_sensor.sensor, self.camera_manager.sensor]) 
+        self.sensor_list.extend(
+            [
+                self.collision_sensor.sensor,
+                self.lane_invasion_sensor.sensor,
+                self.gnss_sensor.sensor,
+                self.camera_manager.sensor,
+            ]
+        )
 
         # self.static_camera = StaticCamera(
         #     carla.Transform(
@@ -215,29 +228,32 @@ class World(object):
         Args:
             frame_number (int): The frame number when the state is recorded.
         """
-        dict_list = []
+        local_df = pd.DataFrame()
         for vehicle in self.world.get_actors().filter("vehicle.*"):
             position = vehicle.get_location()
             rotation = vehicle.get_transform().rotation
             velocity = vehicle.get_velocity()
+            ang_velocity = vehicle.get_angular_velocity()
             bounding_box = vehicle.bounding_box
             state_dict = {
-            'actor_id': vehicle.actor_id,
-            'frame': frame_number,
-            'x': position.x,
-            'y': position.y,
-            'z': position.z,
-            'pitch': rotation.pitch,
-            'yaw': rotation.yaw,
-            'roll': rotation.roll,
-            'xVelocity': velocity.x,
-            'yVelocity': velocity.y,
-            'zVelocity': velocity.z,
-            'width': 2*bounding_box.extent.x,
-            'height': 2*bounding_box.extent.y,
+                "id": vehicle.id,
+                "frame": frame_number,
+                "x": position.x,
+                "y": position.y,
+                "z": position.z,
+                "pitch": rotation.pitch,
+                "yaw": rotation.yaw,
+                "roll": rotation.roll,
+                "xVelocity": velocity.x,
+                "yVelocity": velocity.y,
+                "zVelocity": velocity.z,
+                "xAngVelocity": ang_velocity.x,
+                "yAngVelocity": ang_velocity.y,
+                "zAngVelocity": ang_velocity.z,
+                "width": 2 * bounding_box.extent.x,
+                "height": 2 * bounding_box.extent.y,
             }
-            dict_list.append(state_dict)
-        local_df = pd.DataFrame.from_records(dict_list)
+        local_df = pd.concat([local_df, pd.DataFrame([state_dict])], ignore_index=True)
         self.dataframe = pd.concat([self.dataframe, local_df])
         return local_df
 
@@ -248,15 +264,31 @@ class World(object):
         Args:
             frame_number (int): The frame number to restore the state.
         """
-        groups = self.dataframe.groupby('frame')
+        groups = self.dataframe.groupby("frame")
         frame_df = groups.get_group(frame_number)
+        print(frame_df)
         for index, row in frame_df.iterrows():
-            actor = self.world.get_actor(row['actor_id'])
-            actor.set_transform(carla.Transform(
-                carla.Location(x=row['x'], y=row['y'], z=row['z']),
-                carla.Rotation(pitch=row['pitch'], yaw=row['yaw'], roll=row['roll'])
-            ))
-            actor.set_velocity(carla.Vector3D(x=row['xVelocity'], y=row['yVelocity'], z=row['zVelocity']))
+            actor = self.world.get_actor(int(row["id"]))
+            actor.set_transform(
+                carla.Transform(
+                    carla.Location(x=row["x"], y=row["y"], z=row["z"]),
+                    carla.Rotation(
+                        pitch=row["pitch"], yaw=row["yaw"], roll=row["roll"]
+                    ),
+                )
+            )
+            actor.set_target_velocity(
+                carla.Vector3D(
+                    x=row["xVelocity"], y=row["yVelocity"], z=row["zVelocity"]
+                )
+            )
+            actor.set_target_angular_velocity(
+                carla.Vector3D(
+                    x=row["xAngVelocity"],
+                    y=row["yAngVelocity"],
+                    z=row["zAngVelocity"],
+                )
+            )
 
     def next_weather(self, reverse=False):
         """Get next weather setting"""
@@ -283,7 +315,7 @@ class World(object):
         """Render world"""
         self.camera_manager.render(display)
         self.hud.render(display)
-        #self.static_camera.render(display)
+        # self.static_camera.render(display)
 
     def destroy_sensors(self):
         """Destroy sensors"""
@@ -310,6 +342,7 @@ class World(object):
         # self.players.clear()
         print("Finished destroying actors")
 
+
 def init_sim(args):
     pygame.init()
     pygame.font.init()
@@ -317,7 +350,7 @@ def init_sim(args):
     client = carla.Client(args.host, args.port)
     client.set_timeout(6.0)
 
-    #get traffic manager
+    # get traffic manager
     traffic_manager = client.get_trafficmanager()
     sim_world = client.get_world()
     # apply settings
@@ -327,21 +360,21 @@ def init_sim(args):
     sim_world.apply_settings(settings)
     traffic_manager.set_synchronous_mode(True)
 
-    #initialize display
-    # display = pygame.display.set_mode(
-    #     (args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF
-    # )
-    # print("Created display")
+    # initialize display
+    display = pygame.display.set_mode(
+        (args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF
+    )
+    print("Created display")
 
-    #initialize hud and world
-    hud = HUD(args.width, args.height, text = __doc__)
+    # initialize hud and world
+    hud = HUD(args.width, args.height, text=__doc__)
     print("Created hud")
     world = World(sim_world, hud, args)
     print("Created world instance")
-    
+
     controller = KeyboardControl(world)
 
-    #initialize agent
+    # initialize agent
     if args.agent == "Basic":
         agent = BasicAgent(world.player, 30)
         agent.follow_speed_limits(True)
@@ -356,74 +389,82 @@ def init_sim(args):
 
     clock = pygame.time.Clock()
 
-    return world, agent, clock
+    return world, agent, clock, controller, display
 
-def init_episode(world = None, agent = None):
+def init_episode(world=None, agent=None):
     if world is None:
         print("World is None")
         return -1
     if agent is None:
         print("Agent is None")
         return -1
-    
+
     # Set the agent destination
     spawn_points = world.map.get_spawn_points()
     destination = random.choice(spawn_points).location
     agent.set_destination(destination)
     print("Spawn point is: ", world.player.get_location())
     print("Destination is: ", destination)
+    world.world.tick()
+
+    world.dataframe = pd.DataFrame()
 
     prev_timestamp = world.world.get_snapshot().timestamp
+    input("Press Enter to start episode")
 
     return prev_timestamp
 
 async def send_log_data(host, port, log_data):
     try:
-        # Open a connection to the server
         reader, writer = await asyncio.open_connection(host, port)
-
-        # Serialize the log data to JSON and encode it to UTF-8
-        data = json.dumps(log_data).encode()
-        
-        # Write the data to the server
+        data = json.dumps(log_data.to_dict(orient='records')).encode()
         writer.write(data)
         await writer.drain()
-
-        # Close the writer
         writer.close()
         await writer.wait_closed()
 
+    except ConnectionRefusedError:
+        pass
+    
     except Exception as e:
-        print(f"Error sending log data: {e}")
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        message = template.format(type(e).__name__, e.args)
+        print(message)
 
-async def game_step(episode_counter = -1, frame_counter = -1, world = None, agent= None, clock = None, prev_timestamp = None):
-     
+
+async def game_step(
+    episode_counter=-1,
+    frame_counter=-1,
+    world=None,
+    agent=None,
+    clock=None,
+    prev_timestamp=None,
+    display = None,
+    controller = None
+):
     clock.tick()
     timestamp = world.world.get_snapshot().timestamp
-    #save simulation state
     frame_df = world.record_frame_state(frame_counter)
-
     world.world.tick()
-    # controller.parse_events()
     world.tick(clock, episode_counter, frame_counter)
-    # world.render(display)
-    #pygame.display.flip()
+    
+    if display:
+        world.render(display)
+        pygame.display.flip()
+
+    if controller and controller.parse_events():
+        return -1, -1, prev_timestamp
 
     control = agent.run_step()
     control.manual_gear_shift = False
     world.player.apply_control(control)
-    
-    if 1:
-        # Convert Pandas DataFrame to dictionary for sending
-        frame_dict = frame_df.to_dict(orient='records')
-        # Send log data to the server
-        await send_log_data(log_host, log_port, frame_dict)
-    
+    await send_log_data(log_host, log_port, frame_df)
     prev_timestamp = timestamp
 
     if agent.done():
         print("The target has been reached, restarting from spawn point")
         ret_step = -1
+        ret_episode = 0
         if episode_counter > 10:
             ret_episode = -1
     else:
@@ -431,6 +472,7 @@ async def game_step(episode_counter = -1, frame_counter = -1, world = None, agen
         ret_step = 0
 
     return ret_episode, ret_step, prev_timestamp
+
 
 # ==============================================================================
 # -- main() --------------------------------------------------------------
@@ -518,7 +560,6 @@ async def main():
     args = argparser.parse_args()
 
     args.width, args.height = [int(x) for x in args.res.split("x")]
-    print(args)
     log_level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(format="%(levelname)s: %(message)s", level=log_level)
 
@@ -527,15 +568,29 @@ async def main():
     ret_step = 0
     episode_counter = 0
     try:
-        world, agent, clock = init_sim(args)
+        world, agent, clock, controller, display = init_sim(args)
+        prev_timestamp = init_episode(world, agent)
         while ret_episode != -1:
-            prev_timestamp = init_episode(world, agent)
             frame_counter = 0
             while ret_step != -1:
-                ret_episode, ret_step, prev_timestamp = await game_step(episode_counter=episode_counter, frame_counter=frame_counter, world=world, agent=agent, clock=clock, prev_timestamp=prev_timestamp)
+                ret_episode, ret_step, prev_timestamp = await game_step(
+                    episode_counter=episode_counter,
+                    frame_counter=frame_counter,
+                    controller=None,
+                    display=display,
+                    world=world,
+                    agent=agent,
+                    clock=clock,
+                    prev_timestamp=prev_timestamp,
+                )
                 frame_counter += 1
+            ret_step = 0
+            world.restore_frame_state(0)
+            print("Restored frame state")
+            print("Finished episode ", episode_counter, " initializing next episode")
             episode_counter += 1
-    
+            prev_timestamp = init_episode(world, agent)
+
     except KeyboardInterrupt as e:
         print("\n")
         if world is not None:
@@ -562,7 +617,6 @@ async def main():
         print("Bye, bye")
         pygame.quit()
         return -1
-
 
 
 if __name__ == "__main__":

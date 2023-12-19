@@ -17,9 +17,8 @@ async def handle_client(reader, writer):
 
     if received_data:
         received_str = received_data.decode()  # Decode bytes to string
-        received_dict = json.loads(received_str)  # Deserialize JSON string to dictionary
-        # Print or process the modified dictionary
-        print("Received and manipulated dictionary from client:")
+        received_dict= json.loads(received_str)  # Deserialize JSON string to dictionary
+        print("Received dataframe from client:")
         print(received_dict)
     end_time = time.time()
     print("Closing connection")

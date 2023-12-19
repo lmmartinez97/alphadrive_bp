@@ -8,30 +8,17 @@ except ImportError:
 
 class KeyboardControl(object):
     def __init__(self, world):
-        self.key_state = {
-            "s": False,
-            "l": False,
-        }  # Track if 's' and 'l' keys are pressed
-        self.stop_flag = False
-        self.quit_flag = False
-
         world.hud.notification("Press 'H' or '?' for help.", seconds=4.0)
 
     def parse_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                self.quit_flag = True
-            elif event.type == pygame.KEYDOWN:
-                if (event.key == K_ESCAPE) or (event.key == K_q and pygame.key.get_mods() & KMOD_CTRL):
-                    self.quit_flag = True
-                if event.key == pygame.K_s:
-                    self.key_state["s"] = True
-                elif event.key == pygame.K_l and self.key_state["s"]:
-                    self.stop_flag = True  # Set stop_flag to True when 's' followed by 'l' is pressed
-            elif event.type == pygame.KEYUP:
-                if event.key == pygame.K_s:
-                    self.key_state["s"] = False
-                elif event.key == pygame.K_l:
-                    self.key_state["l"] = False
+                return True
+            if event.type == pygame.KEYUP:
+                if self._is_quit_shortcut(event.key):
+                    return True
 
-        return self.quit_flag, self.stop_flag
+    @staticmethod
+    def _is_quit_shortcut(key):
+        """Shortcut for quitting"""
+        return (key == K_ESCAPE) or (key == K_q and pygame.key.get_mods() & KMOD_CTRL)
