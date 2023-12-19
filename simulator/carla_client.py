@@ -10,17 +10,17 @@
 
 from __future__ import print_function
 
+
 import argparse
-from asyncore import loop
+import asyncio
 import glob
-from hmac import new
+import json
 import logging
 import os
-from pdb import run
 import numpy as np
+import pandas as pd
 import re
 import sys
-import time
 import traceback
 
 from rich import print
@@ -66,6 +66,13 @@ from modules.state_manager import StateManager
 from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
 from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
 from agents.navigation.constant_velocity_agent import ConstantVelocityAgent  # pylint: disable=import-error
+
+# ==============================================================================
+# -- Global functions ----------------------------------------------------------
+# ==============================================================================
+
+log_host = '127.0.0.1'  # Replace with your server's IP address
+log_port = 8888  # Replace with your server's port
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
@@ -126,6 +133,8 @@ class World(object):
         self.recording_enabled = False
         self.recording_start = 0
         self.blueprint_toyota_prius = None
+
+        self.dataframe = pd.DataFrame()
 
 
         settings = self.world.get_settings()
@@ -208,8 +217,9 @@ class World(object):
         """
         dict_list = []
         for vehicle in self.world.get_actors().filter("vehicle.*"):
-            position=vehicle.get_location()
-            velocity=vehicle.get_velocity()
+            position = vehicle.get_location()
+            rotation = vehicle.get_transform().rotation
+            velocity = vehicle.get_velocity()
             bounding_box = vehicle.bounding_box
             state_dict = {
             'actor_id': vehicle.actor_id,
@@ -217,6 +227,9 @@ class World(object):
             'x': position.x,
             'y': position.y,
             'z': position.z,
+            'pitch': rotation.pitch,
+            'yaw': rotation.yaw,
+            'roll': rotation.roll,
             'xVelocity': velocity.x,
             'yVelocity': velocity.y,
             'zVelocity': velocity.z,
@@ -224,7 +237,9 @@ class World(object):
             'height': 2*bounding_box.extent.y,
             }
             dict_list.append(state_dict)
-        return pd.DataFrame.from_records(dict_list)
+        local_df = pd.DataFrame.from_records(dict_list)
+        self.dataframe = pd.concat([self.dataframe, local_df])
+        return local_df
 
     def restore_frame_state(self, frame_number):
         """
@@ -233,8 +248,15 @@ class World(object):
         Args:
             frame_number (int): The frame number to restore the state.
         """
-        for vehicle in self.world.get_actors().filter("vehicle.*"):
-            self.state_manager.restore_vehicle_state(vehicle, frame_number)
+        groups = self.dataframe.groupby('frame')
+        frame_df = groups.get_group(frame_number)
+        for index, row in frame_df.iterrows():
+            actor = self.world.get_actor(row['actor_id'])
+            actor.set_transform(carla.Transform(
+                carla.Location(x=row['x'], y=row['y'], z=row['z']),
+                carla.Rotation(pitch=row['pitch'], yaw=row['yaw'], roll=row['roll'])
+            ))
+            actor.set_velocity(carla.Vector3D(x=row['xVelocity'], y=row['yVelocity'], z=row['zVelocity']))
 
     def next_weather(self, reverse=False):
         """Get next weather setting"""
@@ -336,8 +358,14 @@ def init_sim(args):
 
     return world, agent, clock
 
-def init_episode(args, world, agent):
-
+def init_episode(world = None, agent = None):
+    if world is None:
+        print("World is None")
+        return -1
+    if agent is None:
+        print("Agent is None")
+        return -1
+    
     # Set the agent destination
     spawn_points = world.map.get_spawn_points()
     destination = random.choice(spawn_points).location
@@ -346,17 +374,34 @@ def init_episode(args, world, agent):
     print("Destination is: ", destination)
 
     prev_timestamp = world.world.get_snapshot().timestamp
-    simulated_time = 0
 
-    frame_list = []
-    return frame_list, prev_timestamp
+    return prev_timestamp
 
-def game_step(args, episode_counter, frame_counter, world, agent, clock, prev_timestamp):
-    
+async def send_log_data(host, port, log_data):
+    try:
+        # Open a connection to the server
+        reader, writer = await asyncio.open_connection(host, port)
+
+        # Serialize the log data to JSON and encode it to UTF-8
+        data = json.dumps(log_data).encode()
+        
+        # Write the data to the server
+        writer.write(data)
+        await writer.drain()
+
+        # Close the writer
+        writer.close()
+        await writer.wait_closed()
+
+    except Exception as e:
+        print(f"Error sending log data: {e}")
+
+async def game_step(episode_counter = -1, frame_counter = -1, world = None, agent= None, clock = None, prev_timestamp = None):
+     
     clock.tick()
     timestamp = world.world.get_snapshot().timestamp
     #save simulation state
-    world.save_frame_state(frame_counter)
+    frame_df = world.record_frame_state(frame_counter)
 
     world.world.tick()
     # controller.parse_events()
@@ -369,16 +414,10 @@ def game_step(args, episode_counter, frame_counter, world, agent, clock, prev_ti
     world.player.apply_control(control)
     
     if 1:
-        print()
-        print_green("Simulated time: ", timestamp.elapsed_seconds)
-        print_green("Simulated delta time: ", timestamp.delta_seconds)
-        print_red("Elapsed real time: ", timestamp.platform_timestamp - prev_timestamp.platform_timestamp)
-        print_red("FPS: ", 1/(timestamp.platform_timestamp - prev_timestamp.platform_timestamp + 1e-10))
-        print_green("Frame counter: ", frame_counter)
-        print("Agent state:")
-        print_blue("    Location: ", world.player.get_location())
-        print_blue("    Speed: ", world.player.get_velocity())
-        print_blue("    Control: ", world.player.get_control())
+        # Convert Pandas DataFrame to dictionary for sending
+        frame_dict = frame_df.to_dict(orient='records')
+        # Send log data to the server
+        await send_log_data(log_host, log_port, frame_dict)
     
     prev_timestamp = timestamp
 
@@ -398,7 +437,7 @@ def game_step(args, episode_counter, frame_counter, world, agent, clock, prev_ti
 # ==============================================================================
 
 
-def main():
+async def main():
     """Main method"""
 
     argparser = argparse.ArgumentParser(description="CARLA Automatic Control Client")
@@ -484,16 +523,16 @@ def main():
     logging.basicConfig(format="%(levelname)s: %(message)s", level=log_level)
 
     logging.info("listening to server %s:%s", args.host, args.port)
-
-    print(__doc__)
+    ret_episode = 0
+    ret_step = 0
     episode_counter = 0
     try:
         world, agent, clock = init_sim(args)
         while ret_episode != -1:
-            prev_timestamp = init_episode(args, world, agent)
+            prev_timestamp = init_episode(world, agent)
             frame_counter = 0
             while ret_step != -1:
-                ret_episode, ret_step = game_step(args, episode_counter, frame_counter, prev_timestamp, world, agent, clock, )
+                ret_episode, ret_step, prev_timestamp = await game_step(episode_counter=episode_counter, frame_counter=frame_counter, world=world, agent=agent, clock=clock, prev_timestamp=prev_timestamp)
                 frame_counter += 1
             episode_counter += 1
     
@@ -527,4 +566,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
