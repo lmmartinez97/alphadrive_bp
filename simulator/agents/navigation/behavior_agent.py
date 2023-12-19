@@ -49,7 +49,7 @@ class BehaviorAgent(BasicAgent):
         self._incoming_waypoint = None
         self._min_speed = 5
         self._behavior = None
-        self._sampling_resolution = 4.5
+        self._sampling_resolution = 0.5
 
         # Parameters for agent behavior
         if behavior == 'cautious':

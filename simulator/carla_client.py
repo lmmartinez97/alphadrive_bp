@@ -349,6 +349,7 @@ def init_sim(args):
 
     client = carla.Client(args.host, args.port)
     client.set_timeout(6.0)
+    client.load_world('mergin_scene_1')
 
     # get traffic manager
     traffic_manager = client.get_trafficmanager()
@@ -402,15 +403,19 @@ def init_episode(world=None, agent=None):
     # Set the agent destination
     spawn_points = world.map.get_spawn_points()
     destination = random.choice(spawn_points).location
-    agent.set_destination(destination)
+    route = agent.set_destination(destination)
     print("Spawn point is: ", world.player.get_location())
     print("Destination is: ", destination)
     world.world.tick()
-
     world.dataframe = pd.DataFrame()
 
-    prev_timestamp = world.world.get_snapshot().timestamp
     input("Press Enter to start episode")
+    prev_timestamp = world.world.get_snapshot().timestamp
+
+    for waypoint, _ in route:
+        world.world.debug.draw_point(
+            waypoint.transform.location, size=0.1, color=carla.Color(255, 0, 0), life_time=0
+        )
 
     return prev_timestamp
 
