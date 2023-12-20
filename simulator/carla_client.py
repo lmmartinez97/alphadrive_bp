@@ -16,9 +16,8 @@ import asyncio
 import glob
 import json
 import logging
-import os
-from pty import spawn
 import numpy as np
+import os
 import pandas as pd
 import re
 import sys
@@ -62,15 +61,11 @@ from modules.logger import DataLogger
 from modules.printers import print_blue, print_green, print_highlight, print_red
 from modules.sensors import CollisionSensor, GnssSensor, LaneInvasionSensor
 from modules.shared_mem import SharedMemory
-from modules.state_manager import StateManager
+from modules.utils import get_straight_angle
 
-from agents.navigation.behavior_agent import (
-    BehaviorAgent,
-)  # pylint: disable=import-error
 from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
-from agents.navigation.constant_velocity_agent import (
-    ConstantVelocityAgent,
-)  # pylint: disable=import-error
+from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
+from agents.navigation.constant_velocity_agent import (ConstantVelocityAgent)  # pylint: disable=import-error
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
@@ -143,6 +138,16 @@ class World(object):
 
         self.dataframe = pd.DataFrame()
 
+        self.spawn_point_ego = carla.Transform(
+            carla.Location(x=-850, y=-65, z=0.5),
+            carla.Rotation(yaw=0, pitch=0, roll=0)
+            )
+        self.destination = carla.Location(x= 700, y= -61.5, z=0.5)
+
+        self.traj_angle = get_straight_angle(
+            (self.destination.x, self.destination.y), (self.spawn_point_ego.location.x, self.spawn_point_ego.location.y)
+        )
+
         settings = self.world.get_settings()
         settings.synchronous_mode = True
         settings.fixed_delta_seconds = self.delta_simulated
@@ -153,7 +158,6 @@ class World(object):
         self.world.apply_settings(settings)
         self.restart(args)
 
-        self.state_manager = StateManager()  # Creating StateManager instance
         print("World created")
 
     def restart(self, args):
@@ -179,10 +183,8 @@ class World(object):
             sys.exit(1)
 
         # Spawn the player.
-        self.spawn_points = self.map.get_spawn_points()
-        spawn_point_ego = random.choice(self.spawn_points)
         self.player = self.world.try_spawn_actor(
-            self.blueprint_toyota_prius, spawn_point_ego
+            self.blueprint_toyota_prius, self.spawn_point_ego
         )
         self.modify_vehicle_physics(self.player)
         print("Spawned ego vehicle")
@@ -392,20 +394,26 @@ def init_sim(args):
 
     return world, agent, clock, controller, display
 
-def init_episode(world=None, agent=None):
-    if world is None:
-        print("World is None")
-        return -1
-    if agent is None:
-        print("Agent is None")
-        return -1
+def init_episode(world=None, clock = None, agent=None):
 
     # Set the agent destination
-    spawn_points = world.map.get_spawn_points()
-    destination = random.choice(spawn_points).location
+    destination = carla.Location(x = world.spawn_point_ego.location.x + 100*np.cos(np.pi - world.traj_angle),
+                                 y = world.spawn_point_ego.location.y + 100*np.sin(np.pi - world.traj_angle), 
+                                 z = world.spawn_point_ego.location.z) 
     route = agent.set_destination(destination)
-    print("Spawn point is: ", world.player.get_location())
+    print("Spawn point is: ", world.spawn_point_ego.location)
     print("Destination is: ", destination)
+    init_waypoint = route[0][0]
+    init_location = world.player.get_location()
+    world.player.set_transform(
+        carla.Transform(
+            carla.Location(x=init_location.x, y=init_location.y, z=init_location.z),
+            carla.Rotation(
+                pitch=init_waypoint.transform.rotation.pitch, yaw=init_waypoint.transform.rotation.yaw, roll=init_waypoint.transform.rotation.roll
+            ),
+        )
+    )
+    clock.tick()
     world.world.tick()
     world.dataframe = pd.DataFrame()
 
@@ -414,7 +422,7 @@ def init_episode(world=None, agent=None):
 
     for waypoint, _ in route:
         world.world.debug.draw_point(
-            waypoint.transform.location, size=0.1, color=carla.Color(255, 0, 0), life_time=0
+            waypoint.transform.location, size=0.1, color=carla.Color(255, 0, 0), life_time=100
         )
 
     return prev_timestamp
@@ -574,7 +582,7 @@ async def main():
     episode_counter = 0
     try:
         world, agent, clock, controller, display = init_sim(args)
-        prev_timestamp = init_episode(world, agent)
+        prev_timestamp = init_episode(world=world, clock=clock, agent=agent)
         while ret_episode != -1:
             frame_counter = 0
             while ret_step != -1:
@@ -594,7 +602,9 @@ async def main():
             print("Restored frame state")
             print("Finished episode ", episode_counter, " initializing next episode")
             episode_counter += 1
-            prev_timestamp = init_episode(world, agent)
+            clock.tick()
+            world.world.tick()
+            prev_timestamp = init_episode(world=world, clock=clock, agent=agent)
 
     except KeyboardInterrupt as e:
         print("\n")
