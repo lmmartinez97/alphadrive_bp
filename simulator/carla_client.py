@@ -268,7 +268,6 @@ class World(object):
         """
         groups = self.dataframe.groupby("frame")
         frame_df = groups.get_group(frame_number)
-        print(frame_df)
         for index, row in frame_df.iterrows():
             actor = self.world.get_actor(int(row["id"]))
             actor.set_transform(
@@ -397,22 +396,17 @@ def init_sim(args):
 def init_episode(world=None, clock = None, agent=None):
 
     # Set the agent destination
-    destination = carla.Location(x = world.spawn_point_ego.location.x + 100*np.cos(np.pi - world.traj_angle),
-                                 y = world.spawn_point_ego.location.y + 100*np.sin(np.pi - world.traj_angle), 
-                                 z = world.spawn_point_ego.location.z) 
-    route = agent.set_destination(destination)
+    if np.random.rand() < 0.5:
+        destination = world.map.get_spawn_points()[np.random.randint(0, len(world.map.get_spawn_points()))].location
+    else:
+        destination = carla.Location(x = world.spawn_point_ego.location.x + 100*np.cos(np.pi - world.traj_angle),
+                                    y = world.spawn_point_ego.location.y + 100*np.sin(np.pi - world.traj_angle), 
+                                    z = world.spawn_point_ego.location.z) 
+        
+    route = agent.set_destination(end_location = destination, start_location = world.spawn_point_ego.location)
     print("Spawn point is: ", world.spawn_point_ego.location)
     print("Destination is: ", destination)
-    init_waypoint = route[0][0]
-    init_location = world.player.get_location()
-    world.player.set_transform(
-        carla.Transform(
-            carla.Location(x=init_location.x, y=init_location.y, z=init_location.z),
-            carla.Rotation(
-                pitch=init_waypoint.transform.rotation.pitch, yaw=init_waypoint.transform.rotation.yaw, roll=init_waypoint.transform.rotation.roll
-            ),
-        )
-    )
+    world.player.set_transform(world.spawn_point_ego)
     clock.tick()
     world.world.tick()
     world.dataframe = pd.DataFrame()
@@ -473,6 +467,10 @@ async def game_step(
     world.player.apply_control(control)
     await send_log_data(log_host, log_port, frame_df)
     prev_timestamp = timestamp
+
+    if frame_counter % 100 == 0:
+        print("Frame: ", frame_counter)
+        print("Control action: ", control)
 
     if agent.done():
         print("The target has been reached, restarting from spawn point")

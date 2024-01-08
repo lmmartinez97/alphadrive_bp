@@ -138,7 +138,7 @@ class BasicAgent(object):
         """Get method for protected member local planner"""
         return self._global_planner
 
-    def set_destination(self, end_location, start_location=None):
+    def set_destination(self, end_location = None, start_location=None):
         """
         This method creates a list of waypoints between a starting and ending location,
         based on the route returned by the global router, and adds it to the local planner.
@@ -181,8 +181,9 @@ class BasicAgent(object):
         """
         Calculates the shortest route between a starting and ending waypoint.
 
-            :param start_waypoint (carla.Waypoint): initial waypoint
-            :param end_waypoint (carla.Waypoint): final waypoint
+        Args:
+            start_waypoint (carla.Waypoint): initial waypoint
+            end_waypoint (carla.Waypoint): final waypoint
         """
         start_location = start_waypoint.transform.location
         end_location = end_waypoint.transform.location
@@ -318,9 +319,10 @@ class BasicAgent(object):
         """
         Method to check if there is a vehicle in front of the agent blocking its path.
 
-            :param vehicle_list (list of carla.Vehicle): list contatining vehicle objects.
+        Args:
+            vehicle_list (list): list contatining vehicle objects.
                 If None, all vehicle in the scene are used
-            :param max_distance: max freespace to check for obstacles.
+            max_distance (float): max freespace to check for obstacles.
                 If None, the base threshold value is used
         """
         def get_route_polygon():
