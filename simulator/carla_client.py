@@ -64,11 +64,15 @@ from modules.shared_mem import SharedMemory
 from modules.utils import get_straight_angle
 
 from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
-from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
-from agents.navigation.constant_velocity_agent import (ConstantVelocityAgent)  # pylint: disable=import-error
+from agents.navigation.behavior_agent import (
+    BehaviorAgent,
+)  # pylint: disable=import-error
+from agents.navigation.constant_velocity_agent import (
+    ConstantVelocityAgent,
+)  # pylint: disable=import-error
 
 # ==============================================================================
-# -- Global functions ----------------------------------------------------------
+# -- Global parameters ----------------------------------------------------------
 # ==============================================================================
 
 log_host = "127.0.0.1"  # Replace with your server's IP address
@@ -107,7 +111,7 @@ class World(object):
         """Constructor method"""
         self._args = args
         self.world = carla_world
-        self.delta_simulated = 0.05
+        self.delta_simulated = 0.1
 
         try:
             self.map = self.world.get_map()
@@ -139,14 +143,21 @@ class World(object):
         self.dataframe = pd.DataFrame()
 
         self.spawn_point_ego = carla.Transform(
-            carla.Location(x=-850, y=-65, z=0.5),
-            carla.Rotation(yaw=0, pitch=0, roll=0)
-            )
-        self.destination = carla.Location(x= 700, y= -61.5, z=0.5)
+            carla.Location(x=-850, y=-65, z=0.5), carla.Rotation(yaw=0, pitch=0, roll=0)
+        ) #Spwan point for ego vehicle
 
         self.traj_angle = get_straight_angle(
-            (self.destination.x, self.destination.y), (self.spawn_point_ego.location.x, self.spawn_point_ego.location.y)
-        )
+            (self.destination.x, self.destination.y),
+            (self.spawn_point_ego.location.x, self.spawn_point_ego.location.y),
+        ) #Angle of trajectory - used for setting destination
+        
+        self.destination = carla.Location(
+            x=self.spawn_point_ego.location.x + 100 * np.cos(np.pi - self.traj_angle),
+            y=self.spawn_point_ego.location.y + 100 * np.sin(np.pi - self.traj_angle),
+            z=self.spawn_point_ego.location.z,
+        ) #Destination for ego vehicle
+
+        self.static_camera_flag = 0
 
         settings = self.world.get_settings()
         settings.synchronous_mode = True
@@ -158,17 +169,12 @@ class World(object):
         self.world.apply_settings(settings)
         self.restart(args)
 
+
+
         print("World created")
 
-    def restart(self, args):
-        """Restart the world"""
-        # Keep same camera config if the camera manager exists.
-        cam_index = self.camera_manager.index if self.camera_manager is not None else 0
-        cam_pos_id = (
-            self.camera_manager.transform_index
-            if self.camera_manager is not None
-            else 0
-        )
+    def spawn_ego_vehicle(self):
+        """Spawn ego vehicle"""
 
         # Get a random blueprint.
         self.blueprint_toyota_prius = random.choice(
@@ -190,14 +196,15 @@ class World(object):
         print("Spawned ego vehicle")
         self.world.tick()
 
-        # Set up the sensors.
+    def setup_sensors(self):
+        """Set up sensors"""
+
         self.collision_sensor = CollisionSensor(self.player, self.hud)
         self.lane_invasion_sensor = LaneInvasionSensor(self.player, self.hud)
         self.gnss_sensor = GnssSensor(self.player)
 
         self.camera_manager = CameraManager(self.player, self.hud)
-        self.camera_manager.transform_index = cam_pos_id
-        self.camera_manager.set_sensor(cam_index, notify=False)
+        self.camera_manager.set_sensor(0, notify=False)
 
         self.actor_list.append(self.player)
         self.sensor_list.extend(
@@ -209,16 +216,37 @@ class World(object):
             ]
         )
 
-        # self.static_camera = StaticCamera(
-        #     carla.Transform(
-        #         carla.Location(x=-475, y=-67, z=100),
-        #         carla.Rotation(yaw=0, pitch=-75, roll=0),
-        #     ),
-        #     self.world,
-        #     args.width,
-        #     args.height,
-        # )
-        # self.static_camera.set_sensor()
+    def setup_static_camera(self, width, height):
+        """Set up static camera"""
+
+        self.static_camera = StaticCamera(
+            carla.Transform(
+                carla.Location(x=-475, y=-67, z=100),
+                carla.Rotation(yaw=0, pitch=-75, roll=0),
+            ),
+            self.world,
+            width,
+            height,
+        )
+        self.static_camera.set_sensor()
+        return 1
+
+    def restart(self, args):
+        """Restart the world"""
+        
+        # Keep same camera config if the camera manager exists.
+        cam_index = self.camera_manager.index if self.camera_manager is not None else 0
+        cam_pos_id = (
+            self.camera_manager.transform_index
+            if self.camera_manager is not None
+            else 0
+        )
+
+        self.spawn_ego_vehicle()
+        self.setup_sensors()
+
+        if args.static_camera:
+            self.static_camera_flag = self.setup_static_camera(args.width, args.height)
 
         actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)
@@ -343,88 +371,135 @@ class World(object):
         # self.players.clear()
         print("Finished destroying actors")
 
+class Simulation:
+  
+    def __init__(self, args = None, frame_limit = None, episode_limit = 100):
+        """Constructor method for simulation class
+            TODO: Add support for multiple vehicles
+                  Add support for mcts
+        """
+        # simulation variables
+        self.episode_counter = 0
+        self.frame_counter = 0
+        if not frame_limit:
+            self.frame_limit = np.inf
+        else:
+            self.frame_limit = frame_limit
+        self.episode_limit = episode_limit
+        self.simulation_period = 0.01
+        self.decision_period = 1
 
-def init_sim(args):
-    pygame.init()
-    pygame.font.init()
+        #init pygame
+        pygame.init()
+        pygame.font.init()
 
-    client = carla.Client(args.host, args.port)
-    client.set_timeout(6.0)
-    client.load_world('mergin_scene_1')
+        if args.static_camera:
+            args.width *= 2
+        # initialize display
+        self.display = pygame.display.set_mode(
+            (args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF
+        )
+        print("Created display")
 
-    # get traffic manager
-    traffic_manager = client.get_trafficmanager()
-    sim_world = client.get_world()
-    # apply settings
-    settings = sim_world.get_settings()
-    settings.synchronous_mode = True
-    settings.fixed_delta_seconds = 0.05
-    sim_world.apply_settings(settings)
-    traffic_manager.set_synchronous_mode(True)
+        # initialize hud and world
+        self.hud = HUD(args.width, args.height, text=__doc__)
+        print("Created hud")
+        self.world = World(self.sim_world, self.hud, args)
+        print("Created world instance")
 
-    # initialize display
-    display = pygame.display.set_mode(
-        (args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF
-    )
-    print("Created display")
+        self.controller = KeyboardControl(self.world)
 
-    # initialize hud and world
-    hud = HUD(args.width, args.height, text=__doc__)
-    print("Created hud")
-    world = World(sim_world, hud, args)
-    print("Created world instance")
+        # initialize agent
+        self.agent = None
+        if args.agent == "Basic":
+            self.agent = BasicAgent(self.world.player, 30)
+            self.agent.follow_speed_limits(True)
+        elif args.agent == "Constant":
+            self.agent = ConstantVelocityAgent(self.world.player, 30)
+            ground_loc = self.world.world.ground_projection(self.world.player.get_location(), 5)
+            if ground_loc:
+                self.world.player.set_location(ground_loc.location + carla.Location(z=0.01))
+            self.agent.follow_speed_limits(True)
+        elif args.agent == "Behavior":
+            self.agent = BehaviorAgent(self.world.player, behavior=args.behavior)
 
-    controller = KeyboardControl(world)
+        self.clock = pygame.time.Clock()
 
-    # initialize agent
-    if args.agent == "Basic":
-        agent = BasicAgent(world.player, 30)
-        agent.follow_speed_limits(True)
-    elif args.agent == "Constant":
-        agent = ConstantVelocityAgent(world.player, 30)
-        ground_loc = world.world.ground_projection(world.player.get_location(), 5)
-        if ground_loc:
-            world.player.set_location(ground_loc.location + carla.Location(z=0.01))
-        agent.follow_speed_limits(True)
-    elif args.agent == "Behavior":
-        agent = BehaviorAgent(world.player, behavior=args.behavior)
-
-    clock = pygame.time.Clock()
-
-    return world, agent, clock, controller, display
-
-def init_episode(world=None, clock = None, agent=None):
-
-    # Set the agent destination
-    if np.random.rand() < 0.5:
-        destination = world.map.get_spawn_points()[np.random.randint(0, len(world.map.get_spawn_points()))].location
-    else:
-        destination = carla.Location(x = world.spawn_point_ego.location.x + 100*np.cos(np.pi - world.traj_angle),
-                                    y = world.spawn_point_ego.location.y + 100*np.sin(np.pi - world.traj_angle), 
-                                    z = world.spawn_point_ego.location.z) 
+    def init_episode(self):
+        """Method for initializing a new episode
         
-    route = agent.set_destination(end_location = destination, start_location = world.spawn_point_ego.location)
-    print("Spawn point is: ", world.spawn_point_ego.location)
-    print("Destination is: ", destination)
-    world.player.set_transform(world.spawn_point_ego)
-    clock.tick()
-    world.world.tick()
-    world.dataframe = pd.DataFrame()
-
-    input("Press Enter to start episode")
-    prev_timestamp = world.world.get_snapshot().timestamp
-
-    for waypoint, _ in route:
-        world.world.debug.draw_point(
-            waypoint.transform.location, size=0.1, color=carla.Color(255, 0, 0), life_time=100
+        TODO: Add support for multiple vehicles
+        """
+        # Set the agent destination
+        route = self.agent.set_destination(
+            end_location=self.world.destination, start_location=self.world.spawn_point_ego.location
         )
 
-    return prev_timestamp
+        print("Spawn point is: ", self.world.spawn_point_ego.location)
+        print("Destination is: ", self.world.destination)
+
+        self.world.player.set_transform(self.world.spawn_point_ego)
+        self.clock.tick()
+        self.world.world.tick()
+        self.world.dataframe = pd.DataFrame()
+
+        input("Press Enter to start episode")
+        self.prev_timestamp = self.world.world.get_snapshot().timestamp
+
+        for waypoint, _ in route:
+            self.world.world.debug.draw_point(
+                waypoint.transform.location,
+                size=0.1,
+                color=carla.Color(255, 0, 0),
+                life_time=100,
+            )
+    
+    async def game_step(self):
+        self.clock.tick()
+        timestamp = self.world.world.get_snapshot().timestamp
+        frame_df = self.world.record_frame_state(self.frame_counter)
+        self.world.world.tick()
+        self.world.tick(self.clock, self.episode_counter, self.frame_counter)
+
+        if self.display:
+            self.world.render(self.display)
+            pygame.display.flip()
+
+        if self.controller and self.controller.parse_events():
+            return -1, -1, prev_timestamp
+
+        control = self.agent.run_step()
+        control.manual_gear_shift = False
+        self.world.player.apply_control(control)
+        await send_log_data(log_host, log_port, frame_df)
+        prev_timestamp = timestamp
+
+        if self.frame_counter % 100 == 0:
+            print("Frame: ", self.frame_counter)
+            print("Control action: ", control)
+
+        if self.agent.done() or self.frame_counter > self.frame_limit:
+            self.end_episode()
+
+    def run(self):
+        """Method for running the simulation"""
+        self.init_episode()
+        while self.episode_counter < self.episode_limit:
+            while (self.frame_counter < self.frame_limit) and not self.agent.done():
+                self.game_step()
+                self.frame_counter += 1
+            self.frame_counter = 0
+            print("Restored frame state")
+            print("Finished episode ", self.episode_counter, " initializing next episode")
+            self.episode_counter += 1
+            self.clock.tick()
+            self.world.world.tick()
+            self.init_episode()
 
 async def send_log_data(host, port, log_data):
     try:
         reader, writer = await asyncio.open_connection(host, port)
-        data = json.dumps(log_data.to_dict(orient='records')).encode()
+        data = json.dumps(log_data.to_dict(orient="records")).encode()
         writer.write(data)
         await writer.drain()
         writer.close()
@@ -432,57 +507,14 @@ async def send_log_data(host, port, log_data):
 
     except ConnectionRefusedError:
         pass
-    
+
     except Exception as e:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         message = template.format(type(e).__name__, e.args)
         print(message)
 
 
-async def game_step(
-    episode_counter=-1,
-    frame_counter=-1,
-    world=None,
-    agent=None,
-    clock=None,
-    prev_timestamp=None,
-    display = None,
-    controller = None
-):
-    clock.tick()
-    timestamp = world.world.get_snapshot().timestamp
-    frame_df = world.record_frame_state(frame_counter)
-    world.world.tick()
-    world.tick(clock, episode_counter, frame_counter)
-    
-    if display:
-        world.render(display)
-        pygame.display.flip()
 
-    if controller and controller.parse_events():
-        return -1, -1, prev_timestamp
-
-    control = agent.run_step()
-    control.manual_gear_shift = False
-    world.player.apply_control(control)
-    await send_log_data(log_host, log_port, frame_df)
-    prev_timestamp = timestamp
-
-    if frame_counter % 100 == 0:
-        print("Frame: ", frame_counter)
-        print("Control action: ", control)
-
-    if agent.done():
-        print("The target has been reached, restarting from spawn point")
-        ret_step = -1
-        ret_episode = 0
-        if episode_counter > 10:
-            ret_episode = -1
-    else:
-        ret_episode = 0
-        ret_step = 0
-
-    return ret_episode, ret_step, prev_timestamp
 
 
 # ==============================================================================
@@ -567,6 +599,13 @@ async def main():
         default=0,
         type=int,
     )
+    argparser.add_argument(
+        "-sc",
+        "--static_camera",
+        help="Set flag for using static camera",
+        default=0,
+        type=int,
+    )
 
     args = argparser.parse_args()
 
@@ -575,11 +614,9 @@ async def main():
     logging.basicConfig(format="%(levelname)s: %(message)s", level=log_level)
 
     logging.info("listening to server %s:%s", args.host, args.port)
-    ret_episode = 0
-    ret_step = 0
-    episode_counter = 0
+
     try:
-        world, agent, clock, controller, display = init_sim(args)
+        simulation = Simulation(args=args, frame_limit=1000, episode_limit=100)
         prev_timestamp = init_episode(world=world, clock=clock, agent=agent)
         while ret_episode != -1:
             frame_counter = 0

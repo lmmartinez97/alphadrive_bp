@@ -254,7 +254,7 @@ class StaticCamera(object):
         if self.recording:
             image.save_to_disk("_out/%08d" % image.frame)
 
-    def render(self, display):
+    def render(self, display, x_pos, y_pos):
         """Render method"""
         if self.surface is not None:
-            display.blit(self.surface, (self.width, 0))
+            display.blit(self.surface, (x_pos, y_pos))
