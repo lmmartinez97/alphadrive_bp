@@ -167,3 +167,5 @@ cython_debug/
 
 ### computation benchmarking info
 computation_info*
+
+*/.DS_Store
