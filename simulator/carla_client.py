@@ -401,6 +401,14 @@ class Simulation:
         )
         print("Created display")
 
+        # init client and apply settings
+        self.client = carla.Client(args.host, args.port)
+        self.client.set_timeout(6.0)
+        self.client.load_world("mergin_scene_1")
+        # get traffic manager
+        self.traffic_manager = self.client.get_trafficmanager()
+        self.sim_world = self.client.get_world()
+
         # initialize hud and world
         self.hud = HUD(args.width, args.height, text=__doc__)
         print("Created hud")
