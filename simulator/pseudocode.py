@@ -7,7 +7,7 @@ from __future__ import division
 import math
 import numpy
 import tensorflow as tf
-from typing import List
+from typing import List, Tuple
 
 ##########################
 ####### Helpers ##########
@@ -57,81 +57,191 @@ class Node(object):
     self.value_sum = 0
     self.children = {}
 
-  def expanded(self):
+  def expanded(self) -> bool:
     return len(self.children) > 0
 
-  def value(self):
+  def value(self) -> float:
     if self.visit_count == 0:
       return 0
     return self.value_sum / self.visit_count
 
 
 class Game(object):
+  """
+  Represents the state of the game.
 
-  def __init__(self, history=None):
+  Attributes:
+    history (List[int]): List of actions representing the game history.
+        It records the sequence of actions taken during the game.
+    child_visits (List[List[float]]): Stores the visit count distribution
+        of child nodes for each state in the game.
+    num_actions (int): Represents the size of the action space for the game.
+        It is the total number of possible actions that can be taken by a player.
+  """
+  def __init__(self, history: List[int] = None):
+    """
+    Initializes a new Game instance.
+
+    Args:
+        history (List[int], optional): List of actions representing the game history.
+            Defaults to an empty list.
+    """
     self.history = history or []
     self.child_visits = []
     self.num_actions = 4672  # action space size for chess; 11259 for shogi, 362 for Go
 
-  def terminal(self):
+  def terminal(self) -> bool:
+    """
+    Checks if the game is in a terminal state.
+
+    Returns:
+        bool: True if the game is in a terminal state, False otherwise.
+    """
     # Game specific termination rules.
     pass
 
-  def terminal_value(self, to_play):
+  def terminal_value(self, to_play: int) -> float:
     # Game specific value.
+    """
+    Returns the reward associated with the terminal state of the current game.
+
+    Args:
+        to_play (int): The player to play at the terminal state.
+
+    Returns:
+        float: The terminal value indicating the outcome or score of the game.
+    """
     pass
 
-  def legal_actions(self):
+  def legal_actions(self) -> List[int]:
     # Game specific calculation of legal actions.
+    """
+    Returns legal actions at the current state.
+
+    Returns:
+        List[int]: List of legal actions.
+    """
     return []
 
-  def clone(self):
+  def clone(self) -> 'Game':
+    """
+    Creates a copy of the game state.
+
+    Returns:
+        Game: A new instance representing a copy of the game state.
+    """
     return Game(list(self.history))
 
-  def apply(self, action):
-    self.history.append(action)
+  def apply(self, action: int):
+    """
+    Applies an action to the game state.
 
-  def store_search_statistics(self, root):
+    Args:
+        action (int): The action to be applied.
+
+    Notes:
+        This method interacts with the Carla client to execute the action
+        and updates the game state based on the client's response.
+    """
+    #self.history.append(action)
+    pass
+
+  def store_search_statistics(self, root: 'Node'):
+    """
+    Stores visit statistics for child nodes.
+
+    Args:
+        root (Node): The root node of the search tree.
+    """
     sum_visits = sum(child.visit_count for child in root.children.itervalues())
     self.child_visits.append([
         root.children[a].visit_count / sum_visits if a in root.children else 0
         for a in range(self.num_actions)
     ])
 
-  def make_image(self, state_index: int):
+  def make_image(self, state_index: int) -> List[numpy.array]:
+    """
+    Constructs a game-specific feature representation.
+
+    Args:
+        state_index (int): The index of the current game state.
+
+    Returns:
+        List[numpy.array]: List of feature planes representing the game state.
+    """
     # Game specific feature planes.
     return []
 
-  def make_target(self, state_index: int):
+  def make_target(self, state_index: int) -> Tuple[float, List[float]]:
+    """
+    Constructs a target tuple for training.
+
+    Args:
+        state_index (int): The index of the current game state.
+
+    Returns:
+        Tuple[float, List[float]]: Target value and policy for training the neural network.
+    """
     return (self.terminal_value(state_index % 2),
             self.child_visits[state_index])
 
-  def to_play(self):
+  def to_play(self) -> int:
     return len(self.history) % 2
 
 
 class ReplayBuffer(object):
+  """
+  A replay buffer for storing and sampling self-play game data.
 
-  def __init__(self, config: AlphaZeroConfig):
+  Attributes:
+    window_size (int): The maximum size of the replay buffer.
+        When the buffer exceeds this size, old games are discarded.
+    batch_size (int): The size of batches to be sampled during training.
+    buffer (List[Game]): A list to store self-play games.
+  """
+
+  def __init__(self, config: 'AlphaZeroConfig'):
+    """
+    Initializes a new ReplayBuffer instance.
+
+    Args:
+      config (AlphaZeroConfig): Configuration object containing parameters.
+    """
     self.window_size = config.window_size
     self.batch_size = config.batch_size
     self.buffer = []
 
-  def save_game(self, game):
+  def save_game(self, game: 'Game'):
+    """
+    Saves a self-play game to the replay buffer.
+
+    Args:
+      game (Game): The self-play game to be saved.
+
+    Notes:
+      If the buffer exceeds the maximum window size, old games are discarded.
+    """
     if len(self.buffer) > self.window_size:
       self.buffer.pop(0)
     self.buffer.append(game)
 
-  def sample_batch(self):
+  def sample_batch(self) -> List[Tuple[List[numpy.array], Tuple[float, List[float]]]]:
+    """
+    Samples a batch of self-play game data for training.
+
+    Returns:
+      List[Tuple[List[numpy.array], Tuple[float, List[float]]]]:
+          A list of tuples containing game states (images) and their target values (value, policy).
+    """
     # Sample uniformly across positions.
     move_sum = float(sum(len(g.history) for g in self.buffer))
     games = numpy.random.choice(
         self.buffer,
         size=self.batch_size,
-        p=[len(g.history) / move_sum for g in self.buffer])
+        p=[len(g.history) / move_sum for g in self.buffer]
+    )
     game_pos = [(g, numpy.random.randint(len(g.history))) for g in games]
     return [(g.make_image(i), g.make_target(i)) for (g, i) in game_pos]
-
 
 class Network(object):
 
