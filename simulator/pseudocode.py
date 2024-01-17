@@ -6,6 +6,7 @@ from __future__ import division
 
 import math
 import numpy
+import pickle
 import tensorflow as tf
 from typing import List, Tuple
 
@@ -253,6 +254,12 @@ class Network(object):
 
     get_weights() -> List:
         Returns the weights of the neural network.
+
+    load_model(filepath: str) -> bool:
+        Loads a pre-trained model from a specified file.
+
+    save_model(filepath: str) -> bool:
+        Saves the current model to a specified file.
   """
 
   def inference(self, image: List[numpy.array]) -> Tuple[float, List[float]]:
@@ -278,19 +285,84 @@ class Network(object):
     # Placeholder for the actual implementation.
     return []
 
+  def load_model(self, filepath: str) -> bool:
+    """
+    Loads a pre-trained model from a specified file.
+
+    Args:
+      filepath (str): The path to the saved model file.
+
+    Returns:
+      bool: True if the model was successfully loaded, False otherwise.
+    """
+    try:
+        with open(filepath, 'rb') as file:
+            loaded_model = pickle.load(file)
+            # Placeholder: Assign loaded model to the current instance.
+            # self.loaded_model = loaded_model
+            return True
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        return False
+
+  def save_model(self, filepath: str) -> bool:
+    """
+    Saves the current model to a specified file.
+
+    Args:
+      filepath (str): The desired path for saving the model.
+
+    Returns:
+      bool: True if the model was successfully saved, False otherwise.
+    """
+    try:
+        with open(filepath, 'wb') as file:
+            # Placeholder: Serialize the current model for saving.
+            # pickle.dump(self.current_model, file)
+            return True
+    except Exception as e:
+        print(f"Error saving model: {e}")
+        return False
+
 
 class SharedStorage(object):
+  """
+  A shared storage for keeping track of neural network checkpoints.
+  Attributes:
+    _networks (Dict[int, 'Network']): A dictionary to store network checkpoints with training steps as keys.
+  Methods:
+    latest_network() -> 'Network':
+        Returns the latest stored network checkpoint.
 
+    save_network(step: int, network: 'Network') -> None:
+        Saves a network checkpoint at a specified training step.
+  """
   def __init__(self):
     self._networks = {}
 
-  def latest_network(self) -> Network:
-    if self._networks:
-      return self._networks[max(self._networks.iterkeys())]
-    else:
-      return make_uniform_network()  # policy -> uniform, value -> 0.5
+  def latest_network(self) -> 'Network':
+    """
+    Returns the latest stored network checkpoint.
 
-  def save_network(self, step: int, network: Network):
+    Returns:
+      'Network': The latest stored network checkpoint.
+    """
+    if self._networks:
+        return self._networks[max(self._networks.keys())]
+    else:
+        return make_uniform_network()  # Placeholder: Policy -> uniform, value -> 0.5
+
+  def save_network(self, step: int, network: 'Network') -> None:
+    """
+    Saves a network checkpoint at a specified training step.
+
+    Args:
+      step (int): The training step at which the checkpoint is saved.
+      network ('Network'): The network checkpoint to be saved.
+
+    Returns:
+      None
+    """
     self._networks[step] = network
 
 

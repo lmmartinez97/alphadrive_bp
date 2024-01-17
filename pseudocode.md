@@ -300,6 +300,8 @@ class ReplayBuffer(object):
     - It uses `numpy.random.choice()` to randomly select `batch_size` number of games from the buffer. The probability of selecting each game is proportional to the number of moves it has made, ensuring a uniform sampling across positions.
     - For each sampled game, it randomly chooses a position (index) within the game's history.
     - It constructs a list of tuples, where each tuple contains the game state (image) and the corresponding target values (value, policy). These tuples are generated using the `make_image()` and `make_target()` methods of the `Game` class.
+- TODO
+  - `__init__()`: declare network architecture and training parameters.
 
 ### Network Class
 
@@ -314,6 +316,12 @@ class Network(object):
 
     get_weights() -> List:
         Returns the weights of the neural network.
+
+    load_model(filepath: str) -> bool:
+        Loads a pre-trained model from a specified file.
+
+    save_model(filepath: str) -> bool:
+        Saves the current model to a specified file.
   """
 
   def inference(self, image: List[numpy.array]) -> Tuple[float, List[float]]:
@@ -338,33 +346,109 @@ class Network(object):
     """
     # Placeholder for the actual implementation.
     return []
+
+  def load_model(self, filepath: str) -> bool:
+    """
+    Loads a pre-trained model from a specified file.
+
+    Args:
+      filepath (str): The path to the saved model file.
+
+    Returns:
+      bool: True if the model was successfully loaded, False otherwise.
+    """
+    try:
+        with open(filepath, 'rb') as file:
+            loaded_model = pickle.load(file)
+            # Placeholder: Assign loaded model to the current instance.
+            # self.loaded_model = loaded_model
+            return True
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        return False
+
+  def save_model(self, filepath: str) -> bool:
+    """
+    Saves the current model to a specified file.
+
+    Args:
+      filepath (str): The desired path for saving the model.
+
+    Returns:
+      bool: True if the model was successfully saved, False otherwise.
+    """
+    try:
+        with open(filepath, 'wb') as file:
+            # Placeholder: Serialize the current model for saving.
+            # pickle.dump(self.current_model, file)
+            return True
+    except Exception as e:
+        print(f"Error saving model: {e}")
+        return False
 ```
 
 - This class serves as a placeholder for the Network class that eventually represents the model used to learn the relationship between game states, values and policies. We already have a class that performs a somewhat similar function, the `AutoEncoder` class, that with minimal refactoring can accomplish this function. It remains to be seen if the network needs to be trained in Tensorflow, or if we can use Keras as a replacement.
-- `inference(image)`: Performs a forward pass of the input image through the network. It should return a tuple containing the value associated to the state as predicted by the network, and a tuple of length num_actions that represents the probability distribution over the action space for said state. In a way, the network produces both the value of the state and the q-values of the state-action pairs. The actual implementation of the neural network is not provided in the pseudocode, so it returns a placeholder value of -1 for the predicted value and an empty list [] for the policy. In the actual implementation, this method would use the trained neural network to generate predictions.
-- `get_weights()`: Returns the weights of the network. The actual implementation of obtaining weights from the neural network is not provided in the pseudocode, so it returns an empty list []. In practice, this method would retrieve the current weights of the neural network during training.
+- Methods:
+  - `inference(image)`: Performs a forward pass of the input image through the network. It should return a tuple containing the value associated to the state as predicted by the network, and a tuple of length num_actions that represents the probability distribution over the action space for said state. In a way, the network produces both the value of the state and the q-values of the state-action pairs. The actual implementation of the neural network is not provided in the pseudocode, so it returns a placeholder value of -1 for the predicted value and an empty list [] for the policy. In the actual implementation, this method would use the trained neural network to generate predictions.
+  - `get_weights()`: Returns the weights of the network. The actual implementation of obtaining weights from the neural network is not provided in the pseudocode, so it returns an empty list []. In practice, this method would retrieve the current weights of the neural network during training.
+- Added methods:
+  - `load_model()`: loads a pretrained model from a specified filepath.
+  - `save_model()`: saves a trained model into the specified filepath. Useful for persistence between training and validation.
 
 ### SharedStorage Class
 
 ```python
 class SharedStorage(object):
+  """
+  A shared storage for keeping track of neural network checkpoints.
+  Attributes:
+    _networks (Dict[int, 'Network']): A dictionary to store network checkpoints with training steps as keys.
+  Methods:
+    latest_network() -> 'Network':
+        Returns the latest stored network checkpoint.
+
+    save_network(step: int, network: 'Network') -> None:
+        Saves a network checkpoint at a specified training step.
+  """
   def __init__(self):
     self._networks = {}
 
-  def latest_network(self) -> Network:
-    if self._networks:
-      return self._networks[max(self._networks.keys())]
-    else:
-      return make_uniform_network()
+  def latest_network(self) -> 'Network':
+    """
+    Returns the latest stored network checkpoint.
 
-  def save_network(self, step: int, network: Network):
+    Returns:
+      'Network': The latest stored network checkpoint.
+    """
+    if self._networks:
+        return self._networks[self._networks.keys()[-1]]
+    else:
+        return make_uniform_network()  # Placeholder: Policy -> uniform, value -> 0.5
+
+  def save_network(self, step: int, network: 'Network') -> None:
+    """
+    Saves a network checkpoint at a specified training step.
+
+    Args:
+      step (int): The training step at which the checkpoint is saved.
+      network ('Network'): The network checkpoint to be saved.
+
+    Returns:
+      None
+    """
     self._networks[step] = network
 ```
 
-- Maintains a collection of network snapshots during training.
-- `_networks`: Dictionary mapping training step to the corresponding network snapshot.
-- `latest_network()`: Returns the latest network snapshot.
-- `save_network(step, network)`: Saves a network snapshot at a specific training step.
+- Represents a shared storage mechanism for keeping track of neural network checkpoints during the training of AlphaZero.
+- `_networks`: Dictionary mapping training step to the corresponding network snapshot. This dictionary is used as an expandable list, and its functionality is interchangeaeble with that of a list to which the `save_network()` method appends an instance of the Network class.
+- `latest_network()`: Returns the latest network snapshot. Change of implementation: instead of looking through the keys list of the dictionary to find the latest snapshot with the `max()` function, I changed it to return the last value of the keys list.
+  
+  ```python
+    return self._networks[self._networks.keys()[-1]]
+    #return self._networks[max(self._networks.keys())]
+  ```
+
+- `save_network(step, network)`: Saves a network snapshot at a specific training step. Programatically, it assigns the current state index to the current network in the dictionary. It might have some implications in the future.
 
 ### AlphaZero Function
 
@@ -374,7 +458,7 @@ def alphazero(config: AlphaZeroConfig):
   replay_buffer = ReplayBuffer(config)
 
   for i in range(config.num_actors):
-    launch_job(run_selfplay, config, storage, replay_buffer)
+    launch_job(run_selfplay, conpfig, storage, replay_buffer)
 
   train_network(config, storage, replay_buffer)
 
