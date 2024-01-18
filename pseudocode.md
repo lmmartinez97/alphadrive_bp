@@ -1,5 +1,7 @@
 # AlphaZero Code review
 
+## Helper Classes
+
 ### AlphaZeroConfig Class
 
 ```python
@@ -18,6 +20,8 @@ class AlphaZeroConfig(object):
     # Training
     self.training_steps = int(700e3)
     self.checkpoint_interval = int(1e3)
+    self.training_iterations = 60 # added attribute
+    self.games_per_iteration = 50 # added attribute
     self.window_size = int(1e6)
     self.batch_size = 4096
     self.weight_decay = 1e-4
@@ -34,20 +38,22 @@ class AlphaZeroConfig(object):
 - Defines hyperparameters for both self-play and training phases.
 - Specifies the number of actors (self-play processes), exploration parameters, and training-related parameters such as steps, intervals, window size, batch size, weight decay, momentum, and learning rate schedule.
 - Attributes:
-  - num_actors: Determines how many parallel actors will be trained. This is a parallelization feature that we have little use for. It used in the `alphazero()` function. It will most likely be removed.
-  - num_sample_moves: Controls the trade-off between exploration and exploitation. If less than num_sample_moves have been made through the game, the action is sampled using a softmax function. If more than that amount of moves has been performed, the action taken is the one with the maximum number of visits, favouring exploitation. Used in the `select_action()`
-  - max_moves: This parameter determines how many moves a game can have during the self-play phase. It is used in the `play_game()` function. With this, we can limit the amount of decisions we assign to an episode.
-  - max_simulations: Determines the number of times the tree search is run every step. That is, the number of simulations that occur from the root state to either a terminal state or to a number of steps greater than the limit. Used in `run_mcts()`.
-  - root_dirichlet_alpha and root_exploration_fraction: These paramaters are used in `add_exploration_noise()` to control the amount of exploration of the action space.
-  - pb_c_base and pb_c_init: used in the Upper confidence bound formula, in function `ucb_score()`.
+  - `num_actors`: Determines how many parallel actors will be trained. This is a parallelization feature that we have little use for. It used in the `alphazero()` function. It will most likely be removed.
+  - `num_sample_moves`: Controls the trade-off between exploration and exploitation. If less than num_sample_moves have been made through the game, the action is sampled using a softmax function. If more than that amount of moves has been performed, the action taken is the one with the maximum number of visits, favouring exploitation. Used in the `select_action()`
+  - `max_moves`: This parameter determines how many moves a game can have during the self-play phase. It is used in the `play_game()` function. With this, we can limit the amount of decisions we assign to an episode.
+  - `max_simulations`: Determines the number of times the tree search is run every step. That is, the number of simulations that occur from the root state to either a terminal state or to a number of steps greater than the limit. Used in `run_mcts()`.
+  - `root_dirichlet_alpha` and `root_exploration_fraction`: These paramaters are used in `add_exploration_noise()` to control the amount of exploration of the action space.
+  - `pb_c_base` and `pb_c_init`: used in the Upper confidence bound formula, in function `ucb_score()`.
   - Training parameters:
-    - training_steps: The total number of training steps to perform.
-    - checkpoint_interval: Interval at which to save network checkpoints during training.
-    - window_size: Maximum size of the replay buffer.
-    - batch_size: Size of batches sampled from the replay buffer during each training step.
-    - weight_decay: Weight decay coefficient applied during weight updates.
-    - momentum: Momentum parameter used in the MomentumOptimizer.
-    - learning_rate_schedule: A dictionary defining the learning rate schedule over different training steps.
+- `training_steps`: The total number of training steps to perform.
+  - `checkpoint_interval`: Interval at which to save network checkpoints during training.
+  - `training_iterations`: Number of self-play / training cycles that will be performed. Not on the original pseudocode.
+  - `games_per_iteration`:  Number of self-play games that will be carried out per iteration. Not on the original pseudocode.
+  - `window_size`: Maximum size of the replay buffer.
+  - `batch_size`: Size of batches sampled from the replay buffer during each training step.
+  - `weight_decay`: Weight decay coefficient applied during weight updates.
+  - `momentum`: Momentum parameter used in the MomentumOptimizer.
+  - `learning_rate_schedule`: A dictionary defining the learning rate schedule over different training steps.
 
 ### Node Class
 
@@ -450,48 +456,138 @@ class SharedStorage(object):
 
 - `save_network(step, network)`: Saves a network snapshot at a specific training step. Programatically, it assigns the current state index to the current network in the dictionary. It might have some implications in the future.
 
+## Managing functions
+
 ### AlphaZero Function
 
 ```python
-def alphazero(config: AlphaZeroConfig):
+def alphazero(config: AlphaZeroConfig) -> 'Network':
+  """
+  The main function that coordinates the AlphaZero training process.
+
+  Args:
+    config (AlphaZeroConfig): Configuration settings for AlphaZero.
+
+  Returns:
+    'Network': The latest trained neural network.
+  """
   storage = SharedStorage()
   replay_buffer = ReplayBuffer(config)
 
   for i in range(config.num_actors):
-    launch_job(run_selfplay, conpfig, storage, replay_buffer)
+    launch_job(run_selfplay, config, storage, replay_buffer)
 
   train_network(config, storage, replay_buffer)
 
   return storage.latest_network()
+
 ```
 
-- Orchestrates the self-play and training phases of the
+- Parameters:
+  - `config`: Instance of the `AlphaZeroConfig` class that contains parameters for execution and training.
+- Returns:
+  - The latest instance of the `Network` class that has been trained - This network contains the final result of training.
+- Functionality:
+  1. Shared Resources Initialization:
+    - Creates instances of `SharedStorage` and `ReplayBuffer`.
+    - `storage`: Object responsible for storing and retrieving neural network checkpoints during training.
+    - `replay_buffer`: Buffer for storing self-play games to be used in training.
+  2. Self-Play Jobs Launching:
+    - Uses a loop to launch multiple self-play jobs concurrently.
+    - Calls the `run_selfplay()` function, passing the `configuration`, `storage`, and `replay_buffer` as arguments.
+  3. Network Training:
+    - After self-play jobs, calls the `train_network()` function to start the training process.
+    - Passes the `configuration`, `storage`, and `replay_buffer` as arguments.
 
- AlphaZero algorithm.
-
-- `storage`: Shared storage for network snapshots.
-- `replay_buffer`: Replay buffer for training data.
-- Launches self-play processes and then trains the network.
-- Returns the latest trained network.
+  Note: Given that we can only launch one instance of the CARLA client so far -yet-, the `alphazero()` function should be modified by removing the `launch_job()` call and calling `run_selfplay()` directly.
 
 ### Self-Play Functions
 
+#### Selfplay
+
 ```python
 def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer):
+  """
+    Continuously runs self-play to generate game data for training.
+
+    Parameters:
+      - `config`: Instance of the `AlphaZeroConfig` class that contains parameters for execution and training.
+      - `storage`: Object responsible for storing and retrieving neural network checkpoints during training.
+      - `replay_buffer`: Buffer for storing self-play games to be used in training.
+
+  """
   while True:
     network = storage.latest_network()
     game = play_game(config, network)
     replay_buffer.save_game(game)
+```
 
-def play_game(config: AlphaZeroConfig, network: Network):
+- Parameters:
+  - `config`: Instance of the `AlphaZeroConfig` class that contains parameters for execution and training.
+  - `storage`: Object responsible for storing and retrieving neural network checkpoints during training.
+  - `replay_buffer`: Buffer for storing self-play games to be used in training.
+- Functionality:
+  - Infinite Loop for Self-Play:
+    - Continuously runs a loop for self-play.
+    - Retrieves the latest network snapshot from the shared storage using `storage.latest_network()`.
+    - Generates a game by calling the `play_game()` function with the current configuration and network.
+    - Saves the generated game in the replay buffer using `replay_buffer.save_game()`.
+
+  Note: This function is intended to be executed in parallel, and its main purpose is to continuously generate self-play games and store them in the replay buffer. If parallel execution is not possible, the `while True` loop should be exchanged for a `for` loop with specified termination settings.
+
+#### Play game
+
+```python
+def play_game(config: AlphaZeroConfig, network: Network) -> 'Game':
+  """
+    Plays a single game using Monte Carlo Tree Search (MCTS).
+
+    Args:
+      - config: Instance of the `AlphaZeroConfig` class containing parameters for execution and training.
+      - network: Instance of the `Network` class representing the current neural network model.
+
+      Returns:
+        - game: The final state of the game after completing the self-play.
+
+  """
   game = Game()
   while not game.terminal() and len(game.history) < config.max_moves:
     action, root = run_mcts(config, game, network)
     game.apply(action)
     game.store_search_statistics(root)
   return game
+```
 
-def run_mcts(config: AlphaZeroConfig, game: Game, network: Network):
+- Parameters:
+  - `config`: Instance of the `AlphaZeroConfig` class containing parameters for execution and training.
+  - `network`: Instance of the `Network` class representing the current neural network model.
+- Returns:
+  - `Game`: The final state of the game after completing the self-play.
+- Functionality:
+  - Initializes a new game state using the `Game` class.
+  - Continues playing the game until a terminal state is reached or the maximum number of moves (`config.max_moves`) is reached.
+  - In each step, selects an action using the Monte Carlo Tree Search (MCTS) method by calling `run_mcts()` function.
+  - Applies the selected action to the game state.
+  - Stores the search statistics for the current state in the game by calling `game.store_search_statistics(root)`.
+  - Returns the final state of the game.
+
+  Note: This function is a crucial part of the self-play process and is designed to interact with the neural network to make decisions during gameplay.
+
+#### Run MCTS
+
+```python
+def run_mcts(config: AlphaZeroConfig, game: Game, network: Network) -> Tuple[int, Node]:
+  """
+  Runs the Monte Carlo Tree Search (MCTS) algorithm to select the best action.
+
+  Args:
+    config (AlphaZeroConfig): Configuration settings for AlphaZero.
+    game (Game): The current state of the game.
+    network (Network): The neural network used for value and policy predictions.
+
+  Returns:
+    Tuple[int, Node]: The selected action and the root node of the search tree.
+  """
   root = Node(0)
   evaluate(root, game, network)
   add_exploration_noise(config, root)
@@ -509,7 +605,33 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network):
     value = evaluate(node, scratch_game, network)
     backpropagate(search_path, value, scratch_game.to_play())
   return select_action(config, game, root), root
+```
 
+- Parameters:
+  - config: Instance of the AlphaZeroConfig class that contains parameters for execution and training.
+  - game: The current state of the game.
+  - network: The neural network used for value and policy predictions.
+- Returns:
+  - Tuple[int, Node]: The selected action and the root node of the search tree.
+- Functionality:
+  - Tree Initialization:
+    - Initializes the root node with a visit count of 0.
+    - Evaluates the root node using the neural network to obtain initial predictions for value and policy.
+    - Adds exploration noise to the root node's action values.
+  - Simulation Loop:
+    - Iterates through the specified number of simulations defined in config.num_simulations.
+    - Selects a node and expands the search path until an unexpanded node is reached.
+    - Applies the selected action to a scratch game, updating the search path.
+  - Backpropagation:
+    - Evaluates the final node in the search path and backpropagates the value.
+    - Updates the visit counts and action values along the search path.
+  - Action Selection:
+    - Selects the best action based on the accumulated statistics in the root node.
+    - Returns the selected action and the root node of the search tree.
+
+#### Select action
+
+```python
 def select_action(config: AlphaZeroConfig, game: Game, root: Node):
   visit_counts = [(child.visit_count, action)
                   for action, child in root.children.items()]
@@ -518,12 +640,21 @@ def select_action(config: AlphaZeroConfig, game: Game, root: Node):
   else:
     _, action = max(visit_counts)
   return action
+```
 
+#### Select child
+
+```python
 def select_child(config: AlphaZeroConfig, node: Node):
   _, action, child = max((ucb_score(config, node, child), action, child)
                          for action, child in node.children.items())
   return action, child
+```
 
+
+#### Upper confidence bound formula
+
+```python
 def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node):
   pb_c = math.log((parent.visit_count + config.pb_c_base + 1) /
                   config.pb_c_base) + config.pb_c_init
@@ -532,7 +663,11 @@ def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node):
   prior_score = pb_c * child.prior
   value_score = child.value()
   return prior_score + value_score
+```
 
+#### Evaluate network on a Node
+
+```python
 def evaluate(node: Node, game: Game, network: Network):
   value, policy_logits = network.inference(game.make_image(-1))
   node.to_play = game.to_play()
@@ -541,12 +676,20 @@ def evaluate(node: Node, game: Game, network: Network):
   for action, p in policy.items():
     node.children[action] = Node(p / policy_sum)
   return value
+```
 
+#### Backpropagate reward
+
+```python
 def backpropagate(search_path: List[Node], value: float, to_play):
   for node in search_path:
     node.value_sum += value if node.to_play == to_play else (1 - value)
     node.visit_count += 1
+```
 
+#### Add exploration noise
+
+```python
 def add_exploration_noise(config: AlphaZeroConfig, node: Node):
   actions = list(node.children.keys())
   noise = numpy.random.gamma(config.root_dirichlet_alpha, 1, len(actions))
@@ -556,7 +699,7 @@ def add_exploration_noise(config: AlphaZeroConfig, node: Node):
 ```
 
 - The self-play functions that generate game data through MCTS simulations.
-- `run_selfplay`: Runs an infinite loop where it retrieves the latest network and generates a game using MCTS, saving it to the replay buffer.
+
 - `play_game`: Generates a single game using MCTS until a terminal state or maximum moves are reached.
 - `run_mcts`: Core MCTS algorithm to decide on actions.
 - `select_action`: Selects an action based on visit counts during MCTS.
@@ -578,7 +721,9 @@ def train_network(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer
     batch = replay_buffer.sample_batch()
     update_weights(optimizer, network, batch, config.weight_decay)
   storage.save_network(config.training_steps, network)
+```
 
+```python
 def update_weights(optimizer: tf.train.Optimizer, network: Network, batch, weight_decay: float):
   loss = 0
   for image, (target_value, target_policy) in batch:
@@ -603,10 +748,14 @@ def update_weights(optimizer: tf.train.Optimizer, network: Network, batch, weigh
 ```python
 def softmax_sample(d):
   return 0, 0
+```
 
+```python
 def launch_job(f, *args):
   f(*args)
+```
 
+```python
 def make_uniform_network():
   return Network()
 ```

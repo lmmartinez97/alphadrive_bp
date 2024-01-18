@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>pseudocode.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: 14;
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/*
+
+Monokai Sublime style. Derived from Monokai by noformnocontent http://nn.mit-license.org/
+
+*/
+
+.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 0.5em;
+  background: #23241f;
+}
+
+.hljs,
+.hljs-tag,
+.hljs-subst {
+  color: #f8f8f2;
+}
+
+.hljs-strong,
+.hljs-emphasis {
+  color: #a8a8a2;
+}
+
+.hljs-bullet,
+.hljs-quote,
+.hljs-number,
+.hljs-regexp,
+.hljs-literal,
+.hljs-link {
+  color: #ae81ff;
+}
+
+.hljs-code,
+.hljs-title,
+.hljs-section,
+.hljs-selector-class {
+  color: #a6e22e;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-name,
+.hljs-attr {
+  color: #f92672;
+}
+
+.hljs-symbol,
+.hljs-attribute {
+  color: #66d9ef;
+}
+
+.hljs-params,
+.hljs-class .hljs-title {
+  color: #f8f8f2;
+}
+
+.hljs-string,
+.hljs-type,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-selector-id,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-addition,
+.hljs-variable,
+.hljs-template-variable {
+  color: #e6db74;
+}
+
+.hljs-comment,
+.hljs-deletion,
+.hljs-meta {
+  color: #75715e;
+}
+
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 14px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #2282e1; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="alphazero-code-review">AlphaZero Code review</h1>
+<h2 id="helper-classes">Helper Classes</h2>
+<h3 id="alphazeroconfig-class">AlphaZeroConfig Class</h3>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">AlphaZeroConfig</span><span class="hljs-params">(object)</span>:</span>
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span><span class="hljs-params">(self)</span>:</span>
+    <span class="hljs-comment"># Self-Play</span>
+    self.num_actors = <span class="hljs-number">5000</span>
+    self.num_sampling_moves = <span class="hljs-number">30</span>
+    self.max_moves = <span class="hljs-number">512</span>
+    self.num_simulations = <span class="hljs-number">800</span>
+    self.root_dirichlet_alpha = <span class="hljs-number">0.3</span>
+    self.root_exploration_fraction = <span class="hljs-number">0.25</span>
+    self.pb_c_base = <span class="hljs-number">19652</span>
+    self.pb_c_init = <span class="hljs-number">1.25</span>
+
+    <span class="hljs-comment"># Training</span>
+    self.training_steps = int(<span class="hljs-number">700e3</span>)
+    self.checkpoint_interval = int(<span class="hljs-number">1e3</span>)
+    self.training_iterations = <span class="hljs-number">60</span> <span class="hljs-comment"># added attribute</span>
+    self.games_per_iteration = <span class="hljs-number">50</span> <span class="hljs-comment"># added attribute</span>
+    self.window_size = int(<span class="hljs-number">1e6</span>)
+    self.batch_size = <span class="hljs-number">4096</span>
+    self.weight_decay = <span class="hljs-number">1e-4</span>
+    self.momentum = <span class="hljs-number">0.9</span>
+    self.learning_rate_schedule = {
+        <span class="hljs-number">0</span>: <span class="hljs-number">2e-1</span>,
+        <span class="hljs-number">100e3</span>: <span class="hljs-number">2e-2</span>,
+        <span class="hljs-number">300e3</span>: <span class="hljs-number">2e-3</span>,
+        <span class="hljs-number">500e3</span>: <span class="hljs-number">2e-4</span>
+    }
+</div></code></pre>
+<ul>
+<li>Configuration class for AlphaZero algorithm.</li>
+<li>Defines hyperparameters for both self-play and training phases.</li>
+<li>Specifies the number of actors (self-play processes), exploration parameters, and training-related parameters such as steps, intervals, window size, batch size, weight decay, momentum, and learning rate schedule.</li>
+<li>Attributes:
+<ul>
+<li><code>num_actors</code>: Determines how many parallel actors will be trained. This is a parallelization feature that we have little use for. It used in the <code>alphazero()</code> function. It will most likely be removed.</li>
+<li><code>num_sample_moves</code>: Controls the trade-off between exploration and exploitation. If less than num_sample_moves have been made through the game, the action is sampled using a softmax function. If more than that amount of moves has been performed, the action taken is the one with the maximum number of visits, favouring exploitation. Used in the <code>select_action()</code></li>
+<li><code>max_moves</code>: This parameter determines how many moves a game can have during the self-play phase. It is used in the <code>play_game()</code> function. With this, we can limit the amount of decisions we assign to an episode.</li>
+<li><code>max_simulations</code>: Determines the number of times the tree search is run every step. That is, the number of simulations that occur from the root state to either a terminal state or to a number of steps greater than the limit. Used in <code>run_mcts()</code>.</li>
+<li><code>root_dirichlet_alpha</code> and <code>root_exploration_fraction</code>: These paramaters are used in <code>add_exploration_noise()</code> to control the amount of exploration of the action space.</li>
+<li><code>pb_c_base</code> and <code>pb_c_init</code>: used in the Upper confidence bound formula, in function <code>ucb_score()</code>.</li>
+<li>Training parameters:</li>
+</ul>
+</li>
+<li><code>training_steps</code>: The total number of training steps to perform.
+<ul>
+<li><code>checkpoint_interval</code>: Interval at which to save network checkpoints during training.</li>
+<li><code>training_iterations</code>: Number of self-play / training cycles that will be performed. Not on the original pseudocode.</li>
+<li><code>games_per_iteration</code>:  Number of self-play games that will be carried out per iteration. Not on the original pseudocode.</li>
+<li><code>window_size</code>: Maximum size of the replay buffer.</li>
+<li><code>batch_size</code>: Size of batches sampled from the replay buffer during each training step.</li>
+<li><code>weight_decay</code>: Weight decay coefficient applied during weight updates.</li>
+<li><code>momentum</code>: Momentum parameter used in the MomentumOptimizer.</li>
+<li><code>learning_rate_schedule</code>: A dictionary defining the learning rate schedule over different training steps.</li>
+</ul>
+</li>
+</ul>
+<h3 id="node-class">Node Class</h3>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">Node</span><span class="hljs-params">(object)</span>:</span>
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span><span class="hljs-params">(self, prior: float)</span>:</span>
+    self.visit_count = <span class="hljs-number">0</span>
+    self.to_play = <span class="hljs-number">-1</span>
+    self.prior = prior
+    self.value_sum = <span class="hljs-number">0</span>
+    self.children = {}
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">expanded</span><span class="hljs-params">(self)</span> -&gt; bool:</span>
+    <span class="hljs-keyword">return</span> len(self.children) &gt; <span class="hljs-number">0</span>
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">value</span><span class="hljs-params">(self)</span> -&gt; float:</span>
+    <span class="hljs-keyword">if</span> self.visit_count == <span class="hljs-number">0</span>:
+      <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>
+    <span class="hljs-keyword">return</span> self.value_sum / self.visit_count
+</div></code></pre>
+<ul>
+<li>Represents a node in the Monte Carlo Tree Search (MCTS) algorithm. It will need to be modified to include the state of the simulation.</li>
+<li>Attributes:
+<ul>
+<li><code>visit_count</code>: Number of times this node has been visited. Used to calculate the averagevalue of the node over multiple simulations in the <code>value()</code> method.</li>
+<li><code>to_play</code>: Player to make a move at this node. Either -1 or 1. This will most likely be removed, as we do not have as of yet a formulation of decision making in autonomous driving in terms of an adversarial task.</li>
+<li><code>prior</code>: Prior probability assigned by the neural network. It is obtained from the policy (neural network output for the state associated to this node). It is used in the UCB formula (<code>ucb_score()</code>) to balance exploration and exploitation.</li>
+<li><code>value_sum</code>: Sum of values encountered during simulations.</li>
+<li><code>children</code>: Dictionary of child nodes representing possible actions. Keys are the possible actions from this node, and values are instances of the Node class that represent future states.</li>
+</ul>
+</li>
+<li>Methods:
+<ul>
+<li><code>expanded()</code>: Checks if the node has been expanded (has children).</li>
+<li><code>value()</code>: Returns the average value of the node.</li>
+</ul>
+</li>
+</ul>
+<h3 id="game-class">Game Class</h3>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">Game</span><span class="hljs-params">(object)</span>:</span>
+  <span class="hljs-string">"""
+  Represents the state of the game.
+
+  Attributes:
+    history (List[int]): List of actions representing the game history.
+        It records the sequence of actions taken during the game.
+    child_visits (List[List[float]]): Stores the visit count distribution
+        of child nodes for each state in the game.
+    num_actions (int): Represents the size of the action space for the game.
+        It is the total number of possible actions that can be taken by a player.
+  """</span>
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span><span class="hljs-params">(self, history: List[int] = None)</span>:</span>
+    <span class="hljs-string">"""
+    Initializes a new Game instance.
+
+    Args:
+        history (List[int], optional): List of actions representing the game history.
+            Defaults to an empty list.
+    """</span>
+    self.history = history <span class="hljs-keyword">or</span> []
+    self.child_visits = []
+    self.num_actions = <span class="hljs-number">4672</span>  <span class="hljs-comment"># action space size for chess; 11259 for shogi, 362 for Go</span>
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">terminal</span><span class="hljs-params">(self)</span> -&gt; bool:</span>
+    <span class="hljs-string">"""
+    Checks if the game is in a terminal state.
+
+    Returns:
+        bool: True if the game is in a terminal state, False otherwise.
+    """</span>
+    <span class="hljs-comment"># Game specific termination rules.</span>
+    <span class="hljs-keyword">pass</span>
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">terminal_value</span><span class="hljs-params">(self, to_play: int)</span> -&gt; float:</span>
+    <span class="hljs-comment"># Game specific value.</span>
+    <span class="hljs-string">"""
+    Returns the reward associated with the terminal state of the current game.
+
+    Args:
+        to_play (int): The player to play at the terminal state.
+
+    Returns:
+        float: The terminal value indicating the outcome or score of the game.
+    """</span>
+    <span class="hljs-keyword">pass</span>
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">legal_actions</span><span class="hljs-params">(self)</span> -&gt; List[int]:</span>
+    <span class="hljs-comment"># Game specific calculation of legal actions.</span>
+    <span class="hljs-string">"""
+    Returns legal actions at the current state.
+
+    Returns:
+        List[int]: List of legal actions.
+    """</span>
+    <span class="hljs-keyword">return</span> []
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">clone</span><span class="hljs-params">(self)</span> -&gt; 'Game':</span>
+    <span class="hljs-string">"""
+    Creates a copy of the game state.
+
+    Returns:
+        Game: A new instance representing a copy of the game state.
+    """</span>
+    <span class="hljs-keyword">return</span> Game(list(self.history))
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">apply</span><span class="hljs-params">(self, action: int)</span>:</span>
+    <span class="hljs-string">"""
+    Applies an action to the game state.
+
+    Args:
+        action (int): The action to be applied.
+
+    Notes:
+        This method interacts with the Carla client to execute the action
+        and updates the game state based on the client's response.
+    """</span>
+    <span class="hljs-comment">#self.history.append(action)</span>
+    <span class="hljs-keyword">pass</span>
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">store_search_statistics</span><span class="hljs-params">(self, root: <span class="hljs-string">'Node'</span>)</span>:</span>
+    <span class="hljs-string">"""
+    Stores visit statistics for child nodes.
+
+    Args:
+        root (Node): The root node of the search tree.
+    """</span>
+    sum_visits = sum(child.visit_count <span class="hljs-keyword">for</span> child <span class="hljs-keyword">in</span> root.children.itervalues())
+    self.child_visits.append([
+        root.children[a].visit_count / sum_visits <span class="hljs-keyword">if</span> a <span class="hljs-keyword">in</span> root.children <span class="hljs-keyword">else</span> <span class="hljs-number">0</span>
+        <span class="hljs-keyword">for</span> a <span class="hljs-keyword">in</span> range(self.num_actions)
+    ])
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">make_image</span><span class="hljs-params">(self, state_index: int)</span> -&gt; List[numpy.array]:</span>
+    <span class="hljs-string">"""
+    Constructs a game-specific feature representation.
+
+    Args:
+        state_index (int): The index of the current game state.
+
+    Returns:
+        List[numpy.array]: List of feature planes representing the game state.
+    """</span>
+    <span class="hljs-comment"># Game specific feature planes.</span>
+    <span class="hljs-keyword">return</span> []
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">make_target</span><span class="hljs-params">(self, state_index: int)</span> -&gt; Tuple[float, List[float]]:</span>
+    <span class="hljs-string">"""
+    Constructs a target tuple for training.
+
+    Args:
+        state_index (int): The index of the current game state.
+
+    Returns:
+        Tuple[float, List[float]]: Target value and policy for training the neural network.
+    """</span>
+    <span class="hljs-keyword">return</span> (self.terminal_value(state_index % <span class="hljs-number">2</span>),
+            self.child_visits[state_index])
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">to_play</span><span class="hljs-params">(self)</span> -&gt; int:</span>
+    <span class="hljs-keyword">return</span> len(self.history) % <span class="hljs-number">2</span>
+</div></code></pre>
+<ul>
+<li>Represents the state of the game.</li>
+<li>Attributes:
+<ul>
+<li><code>history</code>: List of actions representing the game history. It works here because the state of a game of chess can be recreated from the initial state (which is always the same) and a list of movements performed by either player. In our case, this history should be a <code>List['Node']</code>, such that the game can be backtracked from the current state to any other that came previously.</li>
+<li><code>child_visits</code>: Stores the visit count distribution of child nodes for each state in the game. This information is used during training to guide the network towards actions with higher visit counts.</li>
+<li><code>num_actions</code>: Represents the size of the action space for the game. It is the total number of possible actions that can be taken by a player. In our case, it will hover between 3 and 5.</li>
+</ul>
+</li>
+<li>Methods:
+<ul>
+<li><code>terminal()</code>: Checks if the game is in a terminal state. To be implemented -or subclassed-. In our case, termination is reached when the ego vehicle has travelled a certain distance or when a collision occurs.</li>
+<li><code>terminal_value(to_play)</code>: Returns the reward associated to the terminal state of the current game. The <code>to_play</code> variable will disappear.</li>
+<li><code>legal_actions()</code>: Returns legal actions at the current state. A possible refactor of this method is to substitute it with an attribute, as in principle every action will be legal in any state. However, the logic to allow lane shifting can be implemented here: if on the left lane, disallow left lane changes.</li>
+<li><code>clone()</code>: Creates a copy of the game state.</li>
+<li><code>apply(action)</code>: Applies an action to the game state. This function will need to include the necessary logic to enforce an action by the agent. Thus, it will send the action to the corresponding logic in the carla client, and receive a new state, which will be appended to the <code>history</code> attribute.</li>
+<li><code>store_search_statistics(root)</code>: Stores visit statistics for child nodes. It records a history of visit statistics, to show how the visit distribution of the actions -and child states- evolves with the game.
+<ul>
+<li>Correlation to Game States:
+<ul>
+<li>The child_visits list accumulates visit count distributions for different game states during the self-play phase. Each entry in this list corresponds to a specific game state and how the agent perceived the value of different actions from that state.</li>
+</ul>
+</li>
+<li>Training the Neural Network:
+<ul>
+<li>During the training phase, you can sample batches of these distributions along with their corresponding game states to train the neural network.</li>
+<li>The neural network is trained to predict both the value (expected outcome) and the policy (probability distribution over actions) based on the input game state.</li>
+</ul>
+</li>
+<li>Guiding Training with Exploration History:
+<ul>
+<li>The historical information in child_visits guides the training process by emphasizing actions that were explored more frequently during the self-play phase.</li>
+<li>Actions with higher visit counts are considered more reliable or desirable based on the agent's exploration and evaluation of the game tree.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><code>make_image(state_index)</code>: Constructs a game-specific feature representation. This fits nicely with our implementation of an autoencoder that extracts potential field information from the scene. However, it is not clear where this function needs to be called, and moreover, it can lead to an excessive increase of memory usage, as instead of storing an array of X by Y entries, as dictated by the encoder, we need to store the potential fields themselves.</li>
+<li><code>make_target(state_index)</code>: Constructs a target value for training. It collects the value associated to a given state, as well as the policy (child visits). In our case, we need not include the modulo operator to choose between players, since the ego vehicle is the only entity from which we collect experiences.</li>
+<li><code>to_play()</code>: Returns the player to play at the current state. This is not useful for our application</li>
+</ul>
+</li>
+</ul>
+<h3 id="replaybuffer-class">ReplayBuffer Class</h3>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ReplayBuffer</span><span class="hljs-params">(object)</span>:</span>
+  <span class="hljs-string">"""
+  A replay buffer for storing and sampling self-play game data.
+
+  Attributes:
+    window_size (int): The maximum size of the replay buffer.
+        When the buffer exceeds this size, old games are discarded.
+    batch_size (int): The size of batches to be sampled during training.
+    buffer (List[Game]): A list to store self-play games.
+  """</span>
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span><span class="hljs-params">(self, config: <span class="hljs-string">'AlphaZeroConfig'</span>)</span>:</span>
+    <span class="hljs-string">"""
+    Initializes a new ReplayBuffer instance.
+
+    Args:
+      config (AlphaZeroConfig): Configuration object containing parameters.
+    """</span>
+    self.window_size = config.window_size
+    self.batch_size = config.batch_size
+    self.buffer = []
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">save_game</span><span class="hljs-params">(self, game: <span class="hljs-string">'Game'</span>)</span>:</span>
+    <span class="hljs-string">"""
+    Saves a self-play game to the replay buffer.
+
+    Args:
+      game (Game): The self-play game to be saved.
+
+    Notes:
+      If the buffer exceeds the maximum window size, old games are discarded.
+    """</span>
+    <span class="hljs-keyword">if</span> len(self.buffer) &gt; self.window_size:
+      self.buffer.pop(<span class="hljs-number">0</span>)
+    self.buffer.append(game)
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">sample_batch</span><span class="hljs-params">(self)</span> -&gt; List[Tuple[List[numpy.array], Tuple[float, List[float]]]]:</span>
+    <span class="hljs-string">"""
+    Samples a batch of self-play game data for training.
+
+    Returns:
+      List[Tuple[List[numpy.array], Tuple[float, List[float]]]]:
+          A list of tuples containing game states (images) and their target values (value, policy).
+    """</span>
+    <span class="hljs-comment"># Sample uniformly across positions.</span>
+    move_sum = float(sum(len(g.history) <span class="hljs-keyword">for</span> g <span class="hljs-keyword">in</span> self.buffer))
+    games = numpy.random.choice(
+        self.buffer,
+        size=self.batch_size,
+        p=[len(g.history) / move_sum <span class="hljs-keyword">for</span> g <span class="hljs-keyword">in</span> self.buffer]
+    )
+    game_pos = [(g, numpy.random.randint(len(g.history))) <span class="hljs-keyword">for</span> g <span class="hljs-keyword">in</span> games]
+    <span class="hljs-keyword">return</span> [(g.make_image(i), g.make_target(i)) <span class="hljs-keyword">for</span> (g, i) <span class="hljs-keyword">in</span> game_pos]
+</div></code></pre>
+<ul>
+<li>Manages a replay buffer of past games for training.</li>
+<li>Attributes
+<ul>
+<li><code>window_size</code>: Maximum size of the replay buffer.</li>
+<li><code>batch_size</code>: Size of batches to sample during training.</li>
+<li><code>buffer</code>: List of stored games.</li>
+</ul>
+</li>
+<li>Methods
+<ul>
+<li><code>save_game(game)</code>: Adds a game to the replay buffer and removes the oldest game if the buffer exceeds the window size.</li>
+<li><code>sample_batch()</code>: Samples a batch of games uniformly across positions.
+<ul>
+<li>It calculates the total number of moves across all games in the buffer using sum(len(g.history) for g in self.buffer). This sum represents the total number of possible positions in all stored games.</li>
+<li>It uses <code>numpy.random.choice()</code> to randomly select <code>batch_size</code> number of games from the buffer. The probability of selecting each game is proportional to the number of moves it has made, ensuring a uniform sampling across positions.</li>
+<li>For each sampled game, it randomly chooses a position (index) within the game's history.</li>
+<li>It constructs a list of tuples, where each tuple contains the game state (image) and the corresponding target values (value, policy). These tuples are generated using the <code>make_image()</code> and <code>make_target()</code> methods of the <code>Game</code> class.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>TODO
+<ul>
+<li><code>__init__()</code>: declare network architecture and training parameters.</li>
+</ul>
+</li>
+</ul>
+<h3 id="network-class">Network Class</h3>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">Network</span><span class="hljs-params">(object)</span>:</span>
+  <span class="hljs-string">"""
+  A placeholder for the neural network used in AlphaZero.
+
+  Methods:
+    inference(image: List[numpy.array]) -&gt; Tuple[float, List[float]]:
+        Performs inference on the input image and returns the value and policy.
+
+    get_weights() -&gt; List:
+        Returns the weights of the neural network.
+
+    load_model(filepath: str) -&gt; bool:
+        Loads a pre-trained model from a specified file.
+
+    save_model(filepath: str) -&gt; bool:
+        Saves the current model to a specified file.
+  """</span>
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">inference</span><span class="hljs-params">(self, image: List[numpy.array])</span> -&gt; Tuple[float, List[float]]:</span>
+    <span class="hljs-string">"""
+    Performs inference on the input image and returns the value and policy.
+
+    Args:
+      image (List[numpy.array]): The input image, a representation of the game state.
+
+    Returns:
+      Tuple[float, List[float]]:
+          A tuple containing the predicted value (expected outcome) and policy (action probabilities).
+    """</span>
+    <span class="hljs-keyword">return</span> (<span class="hljs-number">-1</span>, [])  <span class="hljs-comment"># Placeholder for the actual implementation.</span>
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">get_weights</span><span class="hljs-params">(self)</span> -&gt; List:</span>
+    <span class="hljs-string">"""
+    Returns the weights of the neural network.
+
+    Returns:
+      List: The weights of the neural network.
+    """</span>
+    <span class="hljs-comment"># Placeholder for the actual implementation.</span>
+    <span class="hljs-keyword">return</span> []
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">load_model</span><span class="hljs-params">(self, filepath: str)</span> -&gt; bool:</span>
+    <span class="hljs-string">"""
+    Loads a pre-trained model from a specified file.
+
+    Args:
+      filepath (str): The path to the saved model file.
+
+    Returns:
+      bool: True if the model was successfully loaded, False otherwise.
+    """</span>
+    <span class="hljs-keyword">try</span>:
+        <span class="hljs-keyword">with</span> open(filepath, <span class="hljs-string">'rb'</span>) <span class="hljs-keyword">as</span> file:
+            loaded_model = pickle.load(file)
+            <span class="hljs-comment"># Placeholder: Assign loaded model to the current instance.</span>
+            <span class="hljs-comment"># self.loaded_model = loaded_model</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">True</span>
+    <span class="hljs-keyword">except</span> Exception <span class="hljs-keyword">as</span> e:
+        print(<span class="hljs-string">f"Error loading model: <span class="hljs-subst">{e}</span>"</span>)
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">False</span>
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">save_model</span><span class="hljs-params">(self, filepath: str)</span> -&gt; bool:</span>
+    <span class="hljs-string">"""
+    Saves the current model to a specified file.
+
+    Args:
+      filepath (str): The desired path for saving the model.
+
+    Returns:
+      bool: True if the model was successfully saved, False otherwise.
+    """</span>
+    <span class="hljs-keyword">try</span>:
+        <span class="hljs-keyword">with</span> open(filepath, <span class="hljs-string">'wb'</span>) <span class="hljs-keyword">as</span> file:
+            <span class="hljs-comment"># Placeholder: Serialize the current model for saving.</span>
+            <span class="hljs-comment"># pickle.dump(self.current_model, file)</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">True</span>
+    <span class="hljs-keyword">except</span> Exception <span class="hljs-keyword">as</span> e:
+        print(<span class="hljs-string">f"Error saving model: <span class="hljs-subst">{e}</span>"</span>)
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">False</span>
+</div></code></pre>
+<ul>
+<li>This class serves as a placeholder for the Network class that eventually represents the model used to learn the relationship between game states, values and policies. We already have a class that performs a somewhat similar function, the <code>AutoEncoder</code> class, that with minimal refactoring can accomplish this function. It remains to be seen if the network needs to be trained in Tensorflow, or if we can use Keras as a replacement.</li>
+<li>Methods:
+<ul>
+<li><code>inference(image)</code>: Performs a forward pass of the input image through the network. It should return a tuple containing the value associated to the state as predicted by the network, and a tuple of length num_actions that represents the probability distribution over the action space for said state. In a way, the network produces both the value of the state and the q-values of the state-action pairs. The actual implementation of the neural network is not provided in the pseudocode, so it returns a placeholder value of -1 for the predicted value and an empty list [] for the policy. In the actual implementation, this method would use the trained neural network to generate predictions.</li>
+<li><code>get_weights()</code>: Returns the weights of the network. The actual implementation of obtaining weights from the neural network is not provided in the pseudocode, so it returns an empty list []. In practice, this method would retrieve the current weights of the neural network during training.</li>
+</ul>
+</li>
+<li>Added methods:
+<ul>
+<li><code>load_model()</code>: loads a pretrained model from a specified filepath.</li>
+<li><code>save_model()</code>: saves a trained model into the specified filepath. Useful for persistence between training and validation.</li>
+</ul>
+</li>
+</ul>
+<h3 id="sharedstorage-class">SharedStorage Class</h3>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">SharedStorage</span><span class="hljs-params">(object)</span>:</span>
+  <span class="hljs-string">"""
+  A shared storage for keeping track of neural network checkpoints.
+  Attributes:
+    _networks (Dict[int, 'Network']): A dictionary to store network checkpoints with training steps as keys.
+  Methods:
+    latest_network() -&gt; 'Network':
+        Returns the latest stored network checkpoint.
+
+    save_network(step: int, network: 'Network') -&gt; None:
+        Saves a network checkpoint at a specified training step.
+  """</span>
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span><span class="hljs-params">(self)</span>:</span>
+    self._networks = {}
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">latest_network</span><span class="hljs-params">(self)</span> -&gt; 'Network':</span>
+    <span class="hljs-string">"""
+    Returns the latest stored network checkpoint.
+
+    Returns:
+      'Network': The latest stored network checkpoint.
+    """</span>
+    <span class="hljs-keyword">if</span> self._networks:
+        <span class="hljs-keyword">return</span> self._networks[self._networks.keys()[<span class="hljs-number">-1</span>]]
+    <span class="hljs-keyword">else</span>:
+        <span class="hljs-keyword">return</span> make_uniform_network()  <span class="hljs-comment"># Placeholder: Policy -&gt; uniform, value -&gt; 0.5</span>
+
+  <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">save_network</span><span class="hljs-params">(self, step: int, network: <span class="hljs-string">'Network'</span>)</span> -&gt; <span class="hljs-keyword">None</span>:</span>
+    <span class="hljs-string">"""
+    Saves a network checkpoint at a specified training step.
+
+    Args:
+      step (int): The training step at which the checkpoint is saved.
+      network ('Network'): The network checkpoint to be saved.
+
+    Returns:
+      None
+    """</span>
+    self._networks[step] = network
+</div></code></pre>
+<ul>
+<li>
+<p>Represents a shared storage mechanism for keeping track of neural network checkpoints during the training of AlphaZero.</p>
+</li>
+<li>
+<p><code>_networks</code>: Dictionary mapping training step to the corresponding network snapshot. This dictionary is used as an expandable list, and its functionality is interchangeaeble with that of a list to which the <code>save_network()</code> method appends an instance of the Network class.</p>
+</li>
+<li>
+<p><code>latest_network()</code>: Returns the latest network snapshot. Change of implementation: instead of looking through the keys list of the dictionary to find the latest snapshot with the <code>max()</code> function, I changed it to return the last value of the keys list.</p>
+<pre class="hljs"><code><div>  <span class="hljs-keyword">return</span> self._networks[self._networks.keys()[<span class="hljs-number">-1</span>]]
+  <span class="hljs-comment">#return self._networks[max(self._networks.keys())]</span>
+</div></code></pre>
+</li>
+<li>
+<p><code>save_network(step, network)</code>: Saves a network snapshot at a specific training step. Programatically, it assigns the current state index to the current network in the dictionary. It might have some implications in the future.</p>
+</li>
+</ul>
+<h2 id="managing-functions">Managing functions</h2>
+<h3 id="alphazero-function">AlphaZero Function</h3>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">alphazero</span><span class="hljs-params">(config: AlphaZeroConfig)</span> -&gt; 'Network':</span>
+  <span class="hljs-string">"""
+  The main function that coordinates the AlphaZero training process.
+
+  Args:
+    config (AlphaZeroConfig): Configuration settings for AlphaZero.
+
+  Returns:
+    'Network': The latest trained neural network.
+  """</span>
+  storage = SharedStorage()
+  replay_buffer = ReplayBuffer(config)
+
+  <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> range(config.num_actors):
+    launch_job(run_selfplay, config, storage, replay_buffer)
+
+  train_network(config, storage, replay_buffer)
+
+  <span class="hljs-keyword">return</span> storage.latest_network()
+
+</div></code></pre>
+<ul>
+<li>
+<p>Parameters:</p>
+<ul>
+<li><code>config</code>: Instance of the <code>AlphaZeroConfig</code> class that contains parameters for execution and training.</li>
+</ul>
+</li>
+<li>
+<p>Returns:</p>
+<ul>
+<li>The latest instance of the <code>Network</code> class that has been trained - This network contains the final result of training.</li>
+</ul>
+</li>
+<li>
+<p>Functionality:</p>
+<ol>
+<li>Shared Resources Initialization:</li>
+</ol>
+<ul>
+<li>Creates instances of <code>SharedStorage</code> and <code>ReplayBuffer</code>.</li>
+<li><code>storage</code>: Object responsible for storing and retrieving neural network checkpoints during training.</li>
+<li><code>replay_buffer</code>: Buffer for storing self-play games to be used in training.</li>
+</ul>
+<ol start="2">
+<li>Self-Play Jobs Launching:</li>
+</ol>
+<ul>
+<li>Uses a loop to launch multiple self-play jobs concurrently.</li>
+<li>Calls the <code>run_selfplay()</code> function, passing the <code>configuration</code>, <code>storage</code>, and <code>replay_buffer</code> as arguments.</li>
+</ul>
+<ol start="3">
+<li>Network Training:</li>
+</ol>
+<ul>
+<li>After self-play jobs, calls the <code>train_network()</code> function to start the training process.</li>
+<li>Passes the <code>configuration</code>, <code>storage</code>, and <code>replay_buffer</code> as arguments.</li>
+</ul>
+<p>Note: Given that we can only launch one instance of the CARLA client so far -yet-, the <code>alphazero()</code> function should be modified by removing the <code>launch_job()</code> call and calling <code>run_selfplay()</code> directly.</p>
+</li>
+</ul>
+<h3 id="self-play-functions">Self-Play Functions</h3>
+<h4 id="selfplay">Selfplay</h4>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">run_selfplay</span><span class="hljs-params">(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer)</span>:</span>
+  <span class="hljs-string">"""
+    Continuously runs self-play to generate game data for training.
+
+    Parameters:
+      - `config`: Instance of the `AlphaZeroConfig` class that contains parameters for execution and training.
+      - `storage`: Object responsible for storing and retrieving neural network checkpoints during training.
+      - `replay_buffer`: Buffer for storing self-play games to be used in training.
+
+  """</span>
+  <span class="hljs-keyword">while</span> <span class="hljs-literal">True</span>:
+    network = storage.latest_network()
+    game = play_game(config, network)
+    replay_buffer.save_game(game)
+</div></code></pre>
+<ul>
+<li>
+<p>Parameters:</p>
+<ul>
+<li><code>config</code>: Instance of the <code>AlphaZeroConfig</code> class that contains parameters for execution and training.</li>
+<li><code>storage</code>: Object responsible for storing and retrieving neural network checkpoints during training.</li>
+<li><code>replay_buffer</code>: Buffer for storing self-play games to be used in training.</li>
+</ul>
+</li>
+<li>
+<p>Functionality:</p>
+<ul>
+<li>Infinite Loop for Self-Play:
+<ul>
+<li>Continuously runs a loop for self-play.</li>
+<li>Retrieves the latest network snapshot from the shared storage using <code>storage.latest_network()</code>.</li>
+<li>Generates a game by calling the <code>play_game()</code> function with the current configuration and network.</li>
+<li>Saves the generated game in the replay buffer using <code>replay_buffer.save_game()</code>.</li>
+</ul>
+</li>
+</ul>
+<p>Note: This function is intended to be executed in parallel, and its main purpose is to continuously generate self-play games and store them in the replay buffer. If parallel execution is not possible, the <code>while True</code> loop should be exchanged for a <code>for</code> loop with specified termination settings.</p>
+</li>
+</ul>
+<h4 id="play-game">Play game</h4>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">play_game</span><span class="hljs-params">(config: AlphaZeroConfig, network: Network)</span> -&gt; 'Game':</span>
+  <span class="hljs-string">"""
+    Plays a single game using Monte Carlo Tree Search (MCTS).
+
+    Args:
+      - config: Instance of the `AlphaZeroConfig` class containing parameters for execution and training.
+      - network: Instance of the `Network` class representing the current neural network model.
+
+      Returns:
+        - game: The final state of the game after completing the self-play.
+
+  """</span>
+  game = Game()
+  <span class="hljs-keyword">while</span> <span class="hljs-keyword">not</span> game.terminal() <span class="hljs-keyword">and</span> len(game.history) &lt; config.max_moves:
+    action, root = run_mcts(config, game, network)
+    game.apply(action)
+    game.store_search_statistics(root)
+  <span class="hljs-keyword">return</span> game
+</div></code></pre>
+<ul>
+<li>
+<p>Parameters:</p>
+<ul>
+<li><code>config</code>: Instance of the <code>AlphaZeroConfig</code> class containing parameters for execution and training.</li>
+<li><code>network</code>: Instance of the <code>Network</code> class representing the current neural network model.</li>
+</ul>
+</li>
+<li>
+<p>Returns:</p>
+<ul>
+<li><code>Game</code>: The final state of the game after completing the self-play.</li>
+</ul>
+</li>
+<li>
+<p>Functionality:</p>
+<ul>
+<li>Initializes a new game state using the <code>Game</code> class.</li>
+<li>Continues playing the game until a terminal state is reached or the maximum number of moves (<code>config.max_moves</code>) is reached.</li>
+<li>In each step, selects an action using the Monte Carlo Tree Search (MCTS) method by calling <code>run_mcts()</code> function.</li>
+<li>Applies the selected action to the game state.</li>
+<li>Stores the search statistics for the current state in the game by calling <code>game.store_search_statistics(root)</code>.</li>
+<li>Returns the final state of the game.</li>
+</ul>
+<p>Note: This function is a crucial part of the self-play process and is designed to interact with the neural network to make decisions during gameplay.</p>
+</li>
+</ul>
+<h4 id="run-mcts">Run MCTS</h4>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">run_mcts</span><span class="hljs-params">(config: AlphaZeroConfig, game: Game, network: Network)</span> -&gt; Tuple[int, Node]:</span>
+  <span class="hljs-string">"""
+  Runs the Monte Carlo Tree Search (MCTS) algorithm to select the best action.
+
+  Args:
+    config (AlphaZeroConfig): Configuration settings for AlphaZero.
+    game (Game): The current state of the game.
+    network (Network): The neural network used for value and policy predictions.
+
+  Returns:
+    Tuple[int, Node]: The selected action and the root node of the search tree.
+  """</span>
+  root = Node(<span class="hljs-number">0</span>)
+  evaluate(root, game, network)
+  add_exploration_noise(config, root)
+
+  <span class="hljs-keyword">for</span> _ <span class="hljs-keyword">in</span> range(config.num_simulations):
+    node = root
+    scratch_game = game.clone()
+    search_path = [node]
+
+    <span class="hljs-keyword">while</span> node.expanded():
+      action, node = select_child(config, node)
+      scratch_game.apply(action)
+      search_path.append(node)
+
+    value = evaluate(node, scratch_game, network)
+    backpropagate(search_path, value, scratch_game.to_play())
+  <span class="hljs-keyword">return</span> select_action(config, game, root), root
+</div></code></pre>
+<ul>
+<li>Parameters:
+<ul>
+<li>config: Instance of the AlphaZeroConfig class that contains parameters for execution and training.</li>
+<li>game: The current state of the game.</li>
+<li>network: The neural network used for value and policy predictions.</li>
+</ul>
+</li>
+<li>Returns:
+<ul>
+<li>Tuple[int, Node]: The selected action and the root node of the search tree.</li>
+</ul>
+</li>
+<li>Functionality:
+<ul>
+<li>Tree Initialization:
+<ul>
+<li>Initializes the root node with a visit count of 0.</li>
+<li>Evaluates the root node using the neural network to obtain initial predictions for value and policy.</li>
+<li>Adds exploration noise to the root node's action values.</li>
+</ul>
+</li>
+<li>Simulation Loop:
+<ul>
+<li>Iterates through the specified number of simulations defined in config.num_simulations.</li>
+<li>Selects a node and expands the search path until an unexpanded node is reached.</li>
+<li>Applies the selected action to a scratch game, updating the search path.</li>
+</ul>
+</li>
+<li>Backpropagation:
+<ul>
+<li>Evaluates the final node in the search path and backpropagates the value.</li>
+<li>Updates the visit counts and action values along the search path.</li>
+</ul>
+</li>
+<li>Action Selection:
+<ul>
+<li>Selects the best action based on the accumulated statistics in the root node.</li>
+<li>Returns the selected action and the root node of the search tree.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="select-action">Select action</h4>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">select_action</span><span class="hljs-params">(config: AlphaZeroConfig, game: Game, root: Node)</span>:</span>
+  visit_counts = [(child.visit_count, action)
+                  <span class="hljs-keyword">for</span> action, child <span class="hljs-keyword">in</span> root.children.items()]
+  <span class="hljs-keyword">if</span> len(game.history) &lt; config.num_sampling_moves:
+    _, action = softmax_sample(visit_counts)
+  <span class="hljs-keyword">else</span>:
+    _, action = max(visit_counts)
+  <span class="hljs-keyword">return</span> action
+</div></code></pre>
+<p>#### Select child</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">select_child</span><span class="hljs-params">(config: AlphaZeroConfig, node: Node)</span>:</span>
+  _, action, child = max((ucb_score(config, node, child), action, child)
+                         <span class="hljs-keyword">for</span> action, child <span class="hljs-keyword">in</span> node.children.items())
+  <span class="hljs-keyword">return</span> action, child
+</div></code></pre>
+<p>#### Upper confidence bound formula</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">ucb_score</span><span class="hljs-params">(config: AlphaZeroConfig, parent: Node, child: Node)</span>:</span>
+  pb_c = math.log((parent.visit_count + config.pb_c_base + <span class="hljs-number">1</span>) /
+                  config.pb_c_base) + config.pb_c_init
+  pb_c *= math.sqrt(parent.visit_count) / (child.visit_count + <span class="hljs-number">1</span>)
+
+  prior_score = pb_c * child.prior
+  value_score = child.value()
+  <span class="hljs-keyword">return</span> prior_score + value_score
+</div></code></pre>
+<h4 id="evaluate-network-on-a-node">Evaluate network on a Node</h4>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">evaluate</span><span class="hljs-params">(node: Node, game: Game, network: Network)</span>:</span>
+  value, policy_logits = network.inference(game.make_image(<span class="hljs-number">-1</span>))
+  node.to_play = game.to_play()
+  policy = {a: math.exp(policy_logits[a]) <span class="hljs-keyword">for</span> a <span class="hljs-keyword">in</span> game.legal_actions()}
+  policy_sum = sum(policy.values())
+  <span class="hljs-keyword">for</span> action, p <span class="hljs-keyword">in</span> policy.items():
+    node.children[action] = Node(p / policy_sum)
+  <span class="hljs-keyword">return</span> value
+</div></code></pre>
+<h4 id="backpropagate-reward">Backpropagate reward</h4>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">backpropagate</span><span class="hljs-params">(search_path: List[Node], value: float, to_play)</span>:</span>
+  <span class="hljs-keyword">for</span> node <span class="hljs-keyword">in</span> search_path:
+    node.value_sum += value <span class="hljs-keyword">if</span> node.to_play == to_play <span class="hljs-keyword">else</span> (<span class="hljs-number">1</span> - value)
+    node.visit_count += <span class="hljs-number">1</span>
+</div></code></pre>
+<h4 id="add-exploration-noise">Add exploration noise</h4>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">add_exploration_noise</span><span class="hljs-params">(config: AlphaZeroConfig, node: Node)</span>:</span>
+  actions = list(node.children.keys())
+  noise = numpy.random.gamma(config.root_dirichlet_alpha, <span class="hljs-number">1</span>, len(actions))
+  frac = config.root_exploration_fraction
+  <span class="hljs-keyword">for</span> a, n <span class="hljs-keyword">in</span> zip(actions, noise):
+    node.children[a].prior = node.children[a].prior * (<span class="hljs-number">1</span> - frac) + n * frac
+</div></code></pre>
+<ul>
+<li>
+<p>The self-play functions that generate game data through MCTS simulations.</p>
+</li>
+<li>
+<p><code>play_game</code>: Generates a single game using MCTS until a terminal state or maximum moves are reached.</p>
+</li>
+<li>
+<p><code>run_mcts</code>: Core MCTS algorithm to decide on actions.</p>
+</li>
+<li>
+<p><code>select_action</code>: Selects an action based on visit counts during MCTS.</p>
+</li>
+<li>
+<p><code>select_child</code>: Selects the child node with the highest UCB score.</p>
+</li>
+<li>
+<p><code>ucb_score</code>: Calculates the UCB score for a child node.</p>
+</li>
+<li>
+<p><code>evaluate</code>: Uses the neural network to obtain a value and policy prediction for a given game state.</p>
+</li>
+<li>
+<p><code>backpropagate</code>: Propagates the evaluation up the tree to update visit counts and values.</p>
+</li>
+<li>
+<p><code>add_exploration_noise</code>: Adds Dirichlet noise to the prior of the root to encourage exploration.</p>
+</li>
+</ul>
+<h3 id="training-functions">Training Functions</h3>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">train_network</span><span class="hljs-params">(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer)</span>:</span>
+  network = Network()
+  optimizer = tf.train.MomentumOptimizer(config.learning_rate_schedule, config.momentum)
+  <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> range(config.training_steps):
+    <span class="hljs-keyword">if</span> i % config.checkpoint_interval == <span class="hljs-number">0</span>:
+      storage.save_network(i, network)
+    batch = replay_buffer.sample_batch()
+    update_weights(optimizer, network, batch, config.weight_decay)
+  storage.save_network(config.training_steps, network)
+</div></code></pre>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">update_weights</span><span class="hljs-params">(optimizer: tf.train.Optimizer, network: Network, batch, weight_decay: float)</span>:</span>
+  loss = <span class="hljs-number">0</span>
+  <span class="hljs-keyword">for</span> image, (target_value, target_policy) <span class="hljs-keyword">in</span> batch:
+    value, policy_logits = network.inference(image)
+    loss += (
+        tf.losses.mean_squared_error(value, target_value) +
+        tf.nn.softmax_cross_entropy_with_logits(
+            logits=policy_logits, labels=target_policy))
+
+  <span class="hljs-keyword">for</span> weights <span class="hljs-keyword">in</span> network.get_weights():
+    loss += weight_decay * tf.nn.l2_loss(weights)
+
+  optimizer.minimize(loss)
+</div></code></pre>
+<ul>
+<li>The training functions that update the neural network weights using training data.</li>
+<li><code>train_network</code>: Main training loop that iterates over training steps, saves network checkpoints, samples batches from the replay buffer, and updates the weights.</li>
+<li><code>update_weights</code>: Updates the network weights based on the loss calculated from value and policy predictions, and applies weight decay.</li>
+</ul>
+<h3 id="stubs">Stubs</h3>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">softmax_sample</span><span class="hljs-params">(d)</span>:</span>
+  <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>, <span class="hljs-number">0</span>
+</div></code></pre>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">launch_job</span><span class="hljs-params">(f, *args)</span>:</span>
+  f(*args)
+</div></code></pre>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">make_uniform_network</span><span class="hljs-params">()</span>:</span>
+  <span class="hljs-keyword">return</span> Network()
+</div></code></pre>
+<ul>
+<li>Stubs for functions that are not explicitly defined in the pseudocode but are mentioned, such as <code>softmax_sample</code>, <code>launch_job</code>, and <code>make_uniform_network</code>.</li>
+</ul>
+
+</body>
+</html>

@@ -14,40 +14,34 @@ from typing import List, Tuple
 ####### Helpers ##########
 
 
+
 class AlphaZeroConfig(object):
-
   def __init__(self):
-    ### Self-Play
+    # Self-Play
     self.num_actors = 5000
-
     self.num_sampling_moves = 30
-    self.max_moves = 512  # for chess and shogi, 722 for Go.
+    self.max_moves = 512
     self.num_simulations = 800
-
-    # Root prior exploration noise.
-    self.root_dirichlet_alpha = 0.3  # for chess, 0.03 for Go and 0.15 for shogi.
+    self.root_dirichlet_alpha = 0.3
     self.root_exploration_fraction = 0.25
-
-    # UCB formula
     self.pb_c_base = 19652
     self.pb_c_init = 1.25
 
-    ### Training
+    # Training
     self.training_steps = int(700e3)
     self.checkpoint_interval = int(1e3)
+    self.training_iterations = 60 # added attribute
+    self.games_per_iteration = 50 # added attribute
     self.window_size = int(1e6)
     self.batch_size = 4096
-
     self.weight_decay = 1e-4
     self.momentum = 0.9
-    # Schedule for chess and shogi, Go starts at 2e-2 immediately.
     self.learning_rate_schedule = {
         0: 2e-1,
         100e3: 2e-2,
         300e3: 2e-3,
         500e3: 2e-4
     }
-
 
 class Node(object):
 
@@ -375,7 +369,16 @@ class SharedStorage(object):
 # These two parts only communicate by transferring the latest network checkpoint
 # from the training to the self-play, and the finished games from the self-play
 # to the training.
-def alphazero(config: AlphaZeroConfig):
+def alphazero(config: AlphaZeroConfig) -> 'Network':
+  """
+  The main function that coordinates the AlphaZero training process.
+
+  Args:
+    config (AlphaZeroConfig): Configuration settings for AlphaZero.
+
+  Returns:
+    'Network': The latest trained neural network.
+  """
   storage = SharedStorage()
   replay_buffer = ReplayBuffer(config)
 
@@ -387,6 +390,7 @@ def alphazero(config: AlphaZeroConfig):
   return storage.latest_network()
 
 
+
 ##################################
 ####### Part 1: Self-Play ########
 
@@ -394,8 +398,16 @@ def alphazero(config: AlphaZeroConfig):
 # Each self-play job is independent of all others; it takes the latest network
 # snapshot, produces a game and makes it available to the training job by
 # writing it to a shared replay buffer.
-def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage,
-                 replay_buffer: ReplayBuffer):
+def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer):
+  """
+    Continuously runs self-play to generate game data for training.
+
+    Parameters:
+      - `config`: Instance of the `AlphaZeroConfig` class that contains parameters for execution and training.
+      - `storage`: Object responsible for storing and retrieving neural network checkpoints during training.
+      - `replay_buffer`: Buffer for storing self-play games to be used in training.
+
+  """
   while True:
     network = storage.latest_network()
     game = play_game(config, network)
@@ -405,7 +417,18 @@ def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage,
 # Each game is produced by starting at the initial board position, then
 # repeatedly executing a Monte Carlo Tree Search to generate moves until the end
 # of the game is reached.
-def play_game(config: AlphaZeroConfig, network: Network):
+def play_game(config: AlphaZeroConfig, network: Network) -> 'Game':
+  """
+    Plays a single game using Monte Carlo Tree Search (MCTS).
+
+    Args:
+      - config: Instance of the `AlphaZeroConfig` class containing parameters for execution and training.
+      - network: Instance of the `Network` class representing the current neural network model.
+
+      Returns:
+        - game: The final state of the game after completing the self-play.
+
+  """
   game = Game()
   while not game.terminal() and len(game.history) < config.max_moves:
     action, root = run_mcts(config, game, network)
@@ -418,7 +441,18 @@ def play_game(config: AlphaZeroConfig, network: Network):
 # To decide on an action, we run N simulations, always starting at the root of
 # the search tree and traversing the tree according to the UCB formula until we
 # reach a leaf node.
-def run_mcts(config: AlphaZeroConfig, game: Game, network: Network):
+def run_mcts(config: AlphaZeroConfig, game: Game, network: Network) -> Tuple[int, Node]:
+  """
+  Runs the Monte Carlo Tree Search (MCTS) algorithm to select the best action.
+
+  Args:
+    config (AlphaZeroConfig): Configuration settings for AlphaZero.
+    game (Game): The current state of the game.
+    network (Network): The neural network used for value and policy predictions.
+
+  Returns:
+    Tuple[int, Node]: The selected action and the root node of the search tree.
+  """
   root = Node(0)
   evaluate(root, game, network)
   add_exploration_noise(config, root)
