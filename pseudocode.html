@@ -13,7 +13,7 @@
 
 body {
 	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
-	font-size: 14;
+	font-size: var(--vscode-markdown-font-size, 14px);
 	padding: 0 26px;
 	line-height: var(--vscode-markdown-line-height, 22px);
 	word-wrap: break-word;
@@ -320,7 +320,7 @@ Monokai Sublime style. Derived from Monokai by noformnocontent http://nn.mit-lic
 
  body {
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
-	padding: 0 14px;
+	padding: 0 12px;
 }
 
 pre {
@@ -1100,7 +1100,18 @@ code {
 </li>
 </ul>
 <h4 id="select-action">Select action</h4>
-<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">select_action</span><span class="hljs-params">(config: AlphaZeroConfig, game: Game, root: Node)</span>:</span>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">select_action</span><span class="hljs-params">(config: AlphaZeroConfig, game: Game, root: Node)</span> -&gt; int:</span>
+  <span class="hljs-string">"""
+  Selects the action to take based on the current game state and the MCTS search results.
+
+  Args:
+    config (AlphaZeroConfig): Configuration settings for AlphaZero.
+    game (Game): The current state of the game.
+    root (Node): The root node of the MCTS search tree.
+
+  Returns:
+    action: The selected action to take.
+  """</span>
   visit_counts = [(child.visit_count, action)
                   <span class="hljs-keyword">for</span> action, child <span class="hljs-keyword">in</span> root.children.items()]
   <span class="hljs-keyword">if</span> len(game.history) &lt; config.num_sampling_moves:
@@ -1109,24 +1120,118 @@ code {
     _, action = max(visit_counts)
   <span class="hljs-keyword">return</span> action
 </div></code></pre>
-<p>#### Select child</p>
-<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">select_child</span><span class="hljs-params">(config: AlphaZeroConfig, node: Node)</span>:</span>
-  _, action, child = max((ucb_score(config, node, child), action, child)
-                         <span class="hljs-keyword">for</span> action, child <span class="hljs-keyword">in</span> node.children.items())
+<ul>
+<li>Encapsulates the decision-making process during the MCTS algorithm, balancing exploration and exploitation to guide the search for promising moves in the game tree.</li>
+<li>Parameters:
+<ul>
+<li><code>config</code>: An instance of the AlphaZeroConfig class containing configuration settings.</li>
+<li><code>game</code>: The current state of the game.</li>
+<li><code>root</code> The root node of the MCTS search tree.</li>
+</ul>
+</li>
+<li>Return:
+<ul>
+<li><code>action</code>: Int identifier of the action chosen to make in the game.</li>
+</ul>
+</li>
+<li>Functionality:
+<ul>
+<li>The function computes the visit counts and associated actions for each child node of the root using a list comprehension.</li>
+<li>It then decides whether to explore or exploit based on the length of the game history, based on the amount of moves that have been performed.</li>
+<li>In the exploration phase, the function uses the <code>softmax_sample()</code> function to sample an action from the visit counts distribution.</li>
+<li>In the exploitation phase, it selects the action with the highest visit count.</li>
+</ul>
+</li>
+<li>Note: replaced <code>root.children.iteritems()</code> (python-2 syntax) with <code>root.children.items()</code>.</li>
+</ul>
+<h4 id="select-child">Select child</h4>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">select_child</span><span class="hljs-params">(config: AlphaZeroConfig, node: Node)</span> -&gt; Tuple[int, Node]:</span>
+  <span class="hljs-string">"""
+  Selects the child node with the highest UCB (Upper Confidence Bound) score.
+
+  Args:
+      config (AlphaZeroConfig): Configuration settings for AlphaZero.
+      node (Node): The parent node from which to select a child.
+
+  Returns:
+      Tuple[int, Node]: The selected action and the corresponding child node.
+  """</span>
+  _, action, child = max(
+      (ucb_score(config, node, child), action, child)
+      <span class="hljs-keyword">for</span> action, child <span class="hljs-keyword">in</span> node.children.items()
+  )
   <span class="hljs-keyword">return</span> action, child
 </div></code></pre>
+<ul>
+<li>Select the child node with the highest UCB score.</li>
+<li>Parameters:
+<ul>
+<li>config (AlphaZeroConfig): Configuration settings for AlphaZero.</li>
+<li>node (Node): The parent node from which to select a child.</li>
+</ul>
+</li>
+<li>Returns:
+Tuple[int, Node]: A tuple containing the selected action and the corresponding child node.</li>
+<li>Functionality:
+<ul>
+<li>Computes the UCB score for each child node based on exploration and exploitation factors.</li>
+<li>Selects the child with the highest UCB score.</li>
+</ul>
+</li>
+</ul>
 <p>#### Upper confidence bound formula</p>
-<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">ucb_score</span><span class="hljs-params">(config: AlphaZeroConfig, parent: Node, child: Node)</span>:</span>
-  pb_c = math.log((parent.visit_count + config.pb_c_base + <span class="hljs-number">1</span>) /
-                  config.pb_c_base) + config.pb_c_init
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">ucb_score</span><span class="hljs-params">(config: AlphaZeroConfig, parent: Node, child: Node)</span> -&gt; float:</span>
+  <span class="hljs-string">"""
+  Calculates the Upper Confidence Bound (UCB) score for a child node in the Monte Carlo Tree Search (MCTS) algorithm.
+
+  Args:
+    - config: (AlphaZeroConfig): Configuration settings for AlphaZero.
+    - parent: (Node): The parent node in the search tree.
+    - child: (Node): The child node for which the UCB score is calculated.
+
+  Returns:
+    - float: The UCB score for the child node.
+  """</span>
+  pb_c = math.log((parent.visit_count + config.pb_c_base + <span class="hljs-number">1</span>) / config.pb_c_base) + config.pb_c_init
   pb_c *= math.sqrt(parent.visit_count) / (child.visit_count + <span class="hljs-number">1</span>)
 
   prior_score = pb_c * child.prior
   value_score = child.value()
   <span class="hljs-keyword">return</span> prior_score + value_score
 </div></code></pre>
+<ul>
+<li>Parameters:
+<ul>
+<li><code>config</code> (AlphaZeroConfig): Configuration settings for AlphaZero.</li>
+<li><code>parent</code> (Node): The parent node in the search tree.</li>
+<li><code>child</code> (Node): The child node for which the UCB score is calculated.</li>
+</ul>
+</li>
+<li>Return:
+<ul>
+<li><code>float</code>: The UCB score for the child node.</li>
+</ul>
+</li>
+<li>Functionality:
+<ul>
+<li>Calculates the Upper Confidence Bound (UCB) score for a child node in the Monte Carlo Tree Search (MCTS) algorithm.</li>
+<li>Uses the formula and parameters specified by the AlphaZero configuration.</li>
+</ul>
+</li>
+</ul>
 <h4 id="evaluate-network-on-a-node">Evaluate network on a Node</h4>
-<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">evaluate</span><span class="hljs-params">(node: Node, game: Game, network: Network)</span>:</span>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">evaluate</span><span class="hljs-params">(node: Node, game: Game, network: Network)</span> -&gt; float:</span>
+  <span class="hljs-string">"""
+  Evaluate the given node in the Monte Carlo Tree Search using the neural network.
+
+  Args:
+      node (Node): The node to be evaluated.
+      game (Game): The current state of the game.
+      network (Network): The neural network used for value and policy predictions.
+
+  Returns:
+      float: The value predicted by the neural network for the given game state.
+  """</span>
   value, policy_logits = network.inference(game.make_image(<span class="hljs-number">-1</span>))
   node.to_play = game.to_play()
   policy = {a: math.exp(policy_logits[a]) <span class="hljs-keyword">for</span> a <span class="hljs-keyword">in</span> game.legal_actions()}
@@ -1135,14 +1240,79 @@ code {
     node.children[action] = Node(p / policy_sum)
   <span class="hljs-keyword">return</span> value
 </div></code></pre>
+<ul>
+<li>Evaluates a node in the Monte Carlo Tree Search using a neural network to obtain the predicted value for the given game state.</li>
+<li>Parameters:
+<ul>
+<li><code>node</code>: The node to be evaluated in the MCTS search tree.</li>
+<li><code>game</code>: The current state of the game.</li>
+<li><code>network</code>: The neural network used for value and policy predictions.</li>
+</ul>
+</li>
+<li>Return:
+<ul>
+<li><code>float</code>: The value predicted by the neural network for the given game state.</li>
+</ul>
+</li>
+<li>Functionality:
+<ul>
+<li>The function takes a node, representing a state in the game tree, the current game state, and the neural network.</li>
+<li>It uses the neural network to perform an inference on the image representation of the current game state.</li>
+<li>The predicted value is returned, representing the expected outcome of the game state according to the neural network.</li>
+</ul>
+</li>
+</ul>
 <h4 id="backpropagate-reward">Backpropagate reward</h4>
 <pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">backpropagate</span><span class="hljs-params">(search_path: List[Node], value: float, to_play)</span>:</span>
+  <span class="hljs-string">"""
+  Backpropagates the evaluation value through the Monte Carlo Tree Search (MCTS) tree.
+
+  Args:
+      - search_path (List[Node]): List of nodes representing the search path from the leaf to the root.
+      - value (float): The evaluation value to be backpropagated.
+      - to_play: The player to play at the terminal state.
+
+  Returns:
+      None
+
+  """</span>
   <span class="hljs-keyword">for</span> node <span class="hljs-keyword">in</span> search_path:
     node.value_sum += value <span class="hljs-keyword">if</span> node.to_play == to_play <span class="hljs-keyword">else</span> (<span class="hljs-number">1</span> - value)
     node.visit_count += <span class="hljs-number">1</span>
 </div></code></pre>
+<ul>
+<li>Backpropagates the evaluation value through the Monte Carlo Tree Search (MCTS) tree.</li>
+<li>Parameters:
+<ul>
+<li><code>search_path</code>: List of nodes representing the search path from the leaf to the root.</li>
+<li><code>value</code>: The evaluation value to be backpropagated.</li>
+<li><code>to_play</code>: The player to play at the terminal state.</li>
+</ul>
+</li>
+<li>Return:
+<ul>
+<li>None</li>
+</ul>
+</li>
+<li>Functionality:
+<ul>
+<li>At the end of a simulation, propagates the evaluation all the way up the tree to the root.</li>
+<li>Updates the visit counts and value estimates of nodes in the search path.</li>
+</ul>
+</li>
+</ul>
 <h4 id="add-exploration-noise">Add exploration noise</h4>
 <pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">add_exploration_noise</span><span class="hljs-params">(config: AlphaZeroConfig, node: Node)</span>:</span>
+  <span class="hljs-string">"""
+  Adds Dirichlet noise to the prior of the root to encourage exploration.
+
+  Args:
+    - config (AlphaZeroConfig): Configuration settings for AlphaZero.
+    - node (Node): The root node of the MCTS search tree.
+
+  Return:
+    - None
+  """</span>
   actions = list(node.children.keys())
   noise = numpy.random.gamma(config.root_dirichlet_alpha, <span class="hljs-number">1</span>, len(actions))
   frac = config.root_exploration_fraction
@@ -1150,36 +1320,40 @@ code {
     node.children[a].prior = node.children[a].prior * (<span class="hljs-number">1</span> - frac) + n * frac
 </div></code></pre>
 <ul>
-<li>
-<p>The self-play functions that generate game data through MCTS simulations.</p>
+<li>Adds Dirichlet noise to the prior of the root node, enhancing exploration during Monte Carlo Tree Search (MCTS).</li>
+<li>Parameters:
+<ul>
+<li><code>config</code>: Configuration settings for AlphaZero.</li>
+<li><code>node</code> : The root node of the MCTS search tree.</li>
+</ul>
 </li>
-<li>
-<p><code>play_game</code>: Generates a single game using MCTS until a terminal state or maximum moves are reached.</p>
+<li>Return:
+<ul>
+<li>None</li>
+</ul>
 </li>
-<li>
-<p><code>run_mcts</code>: Core MCTS algorithm to decide on actions.</p>
-</li>
-<li>
-<p><code>select_action</code>: Selects an action based on visit counts during MCTS.</p>
-</li>
-<li>
-<p><code>select_child</code>: Selects the child node with the highest UCB score.</p>
-</li>
-<li>
-<p><code>ucb_score</code>: Calculates the UCB score for a child node.</p>
-</li>
-<li>
-<p><code>evaluate</code>: Uses the neural network to obtain a value and policy prediction for a given game state.</p>
-</li>
-<li>
-<p><code>backpropagate</code>: Propagates the evaluation up the tree to update visit counts and values.</p>
-</li>
-<li>
-<p><code>add_exploration_noise</code>: Adds Dirichlet noise to the prior of the root to encourage exploration.</p>
+<li>Functionality:
+<ul>
+<li>Generates Dirichlet noise using gamma distribution.</li>
+<li>Applies the noise to the prior probabilities of child nodes in the root.</li>
+<li>Balances exploration (randomness) and exploitation during the MCTS algorithm.</li>
+</ul>
 </li>
 </ul>
 <h3 id="training-functions">Training Functions</h3>
+<h4 id="train-network">Train network</h4>
 <pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">train_network</span><span class="hljs-params">(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer)</span>:</span>
+  <span class="hljs-string">"""
+  Trains the neural network using self-play game data from the replay buffer.
+
+  Parameters:
+    - config (AlphaZeroConfig): Configuration settings for AlphaZero.
+    - storage (SharedStorage): Object responsible for storing and retrieving neural network checkpoints during training.
+    - replay_buffer (ReplayBuffer): Buffer containing self-play games for training.
+
+  Returns:
+    None
+  """</span>
   network = Network()
   optimizer = tf.train.MomentumOptimizer(config.learning_rate_schedule, config.momentum)
   <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> range(config.training_steps):
@@ -1189,7 +1363,45 @@ code {
     update_weights(optimizer, network, batch, config.weight_decay)
   storage.save_network(config.training_steps, network)
 </div></code></pre>
-<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">update_weights</span><span class="hljs-params">(optimizer: tf.train.Optimizer, network: Network, batch, weight_decay: float)</span>:</span>
+<ul>
+<li>Trains the neural network using self-play game data from the replay buffer.</li>
+<li>Parameters:
+<ul>
+<li><code>config</code>: Configuration settings for AlphaZero.</li>
+<li><code>storage</code>: Object responsible for storing and retrieving neural network checkpoints during training.</li>
+<li><code>replay_buffer</code>: Buffer containing self-play games for training.</li>
+</ul>
+</li>
+<li>Returns:
+<ul>
+<li>None</li>
+</ul>
+</li>
+<li>Functionality:
+<ul>
+<li>Initializes a neural network and optimizer.</li>
+<li>Iterates through training steps.</li>
+<li>Periodically saves network checkpoints to storage.</li>
+<li>Samples a batch from the replay buffer for training.</li>
+<li>Updates the network weights using backpropagation and optimization.</li>
+</ul>
+</li>
+</ul>
+<h4 id="network-coefficient-update">Network coefficient update</h4>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">update_weights</span><span class="hljs-params">(optimizer: tf.train.Optimizer, network: Network, batch,
+                   weight_decay: float)</span>:</span>
+  <span class="hljs-string">"""
+  Updates the weights of the neural network based on the training batch.
+
+  Parameters:
+    - `optimizer` (tf.train.Optimizer): TensorFlow optimizer for weight updates.
+    - `network` (Network): Neural network instance to be updated.
+    - `batch` (List[Tuple[List[numpy.array], Tuple[float, List[float]]]]): Training batch containing game states and target values.
+    - `weight_decay` (float): Coefficient for L2 regularization.
+
+  Returns:
+    None
+  """</span>
   loss = <span class="hljs-number">0</span>
   <span class="hljs-keyword">for</span> image, (target_value, target_policy) <span class="hljs-keyword">in</span> batch:
     value, policy_logits = network.inference(image)
@@ -1204,9 +1416,30 @@ code {
   optimizer.minimize(loss)
 </div></code></pre>
 <ul>
-<li>The training functions that update the neural network weights using training data.</li>
-<li><code>train_network</code>: Main training loop that iterates over training steps, saves network checkpoints, samples batches from the replay buffer, and updates the weights.</li>
-<li><code>update_weights</code>: Updates the network weights based on the loss calculated from value and policy predictions, and applies weight decay.</li>
+<li>Updates the weights of the neural network based on the training batch.</li>
+<li>Parameters:
+<ul>
+<li><code>optimizer</code>: TensorFlow optimizer for weight updates.</li>
+<li><code>network</code> : Neural network instance to be updated.</li>
+<li><code>batch</code>: Training batch containing game states and target values.</li>
+<li><code>weight_decay</code> (float): Coefficient for L2 regularization.</li>
+</ul>
+</li>
+<li>Returns:
+<ul>
+<li>None</li>
+</ul>
+</li>
+<li>Functionality:
+<ul>
+<li>Iterates through the training batch.</li>
+<li>Performs forward pass to obtain predictions.</li>
+<li>Computes the mean squared error for value prediction.</li>
+<li>Computes the cross-entropy loss for policy prediction.</li>
+<li>Applies L2 regularization to the weights.</li>
+<li>Minimizes the combined loss using the optimizer.</li>
+</ul>
+</li>
 </ul>
 <h3 id="stubs">Stubs</h3>
 <pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">softmax_sample</span><span class="hljs-params">(d)</span>:</span>

@@ -472,9 +472,20 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network) -> Tuple[int
   return select_action(config, game, root), root
 
 
-def select_action(config: AlphaZeroConfig, game: Game, root: Node):
+def select_action(config: AlphaZeroConfig, game: Game, root: Node) -> int:
+  """
+  Selects the action to take based on the current game state and the MCTS search results.
+
+  Args:
+    config (AlphaZeroConfig): Configuration settings for AlphaZero.
+    game (Game): The current state of the game.
+    root (Node): The root node of the MCTS search tree.
+
+  Returns:
+    action: The selected action to take.
+  """
   visit_counts = [(child.visit_count, action)
-                  for action, child in root.children.iteritems()]
+                  for action, child in root.children.items()]
   if len(game.history) < config.num_sampling_moves:
     _, action = softmax_sample(visit_counts)
   else:
@@ -483,17 +494,40 @@ def select_action(config: AlphaZeroConfig, game: Game, root: Node):
 
 
 # Select the child with the highest UCB score.
-def select_child(config: AlphaZeroConfig, node: Node):
-  _, action, child = max((ucb_score(config, node, child), action, child)
-                         for action, child in node.children.iteritems())
+
+def select_child(config: AlphaZeroConfig, node: Node) -> Tuple[int, Node]:
+  """
+  Selects the child node with the highest UCB (Upper Confidence Bound) score.
+
+  Args:
+      config (AlphaZeroConfig): Configuration settings for AlphaZero.
+      node (Node): The parent node from which to select a child.
+
+  Returns:
+      Tuple[int, Node]: The selected action and the corresponding child node.
+  """
+  _, action, child = max(
+      (ucb_score(config, node, child), action, child)
+      for action, child in node.children.items()
+  )
   return action, child
 
 
 # The score for a node is based on its value, plus an exploration bonus based on
 # the prior.
-def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node):
-  pb_c = math.log((parent.visit_count + config.pb_c_base + 1) /
-                  config.pb_c_base) + config.pb_c_init
+def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node) -> float:
+  """
+  Calculates the Upper Confidence Bound (UCB) score for a child node in the Monte Carlo Tree Search (MCTS) algorithm.
+
+  Args:
+    - config: (AlphaZeroConfig): Configuration settings for AlphaZero.
+    - parent: (Node): The parent node in the search tree.
+    - child: (Node): The child node for which the UCB score is calculated.
+
+  Returns:
+    - float: The UCB score for the child node.
+  """
+  pb_c = math.log((parent.visit_count + config.pb_c_base + 1) / config.pb_c_base) + config.pb_c_init
   pb_c *= math.sqrt(parent.visit_count) / (child.visit_count + 1)
 
   prior_score = pb_c * child.prior
@@ -502,14 +536,23 @@ def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node):
 
 
 # We use the neural network to obtain a value and policy prediction.
-def evaluate(node: Node, game: Game, network: Network):
-  value, policy_logits = network.inference(game.make_image(-1))
+def evaluate(node: Node, game: Game, network: Network) -> float:
+  """
+  Evaluate the given node in the Monte Carlo Tree Search using the neural network.
 
-  # Expand the node.
+  Args:
+      node (Node): The node to be evaluated.
+      game (Game): The current state of the game.
+      network (Network): The neural network used for value and policy predictions.
+
+  Returns:
+      float: The value predicted by the neural network for the given game state.
+  """
+  value, policy_logits = network.inference(game.make_image(-1))
   node.to_play = game.to_play()
   policy = {a: math.exp(policy_logits[a]) for a in game.legal_actions()}
-  policy_sum = sum(policy.itervalues())
-  for action, p in policy.iteritems():
+  policy_sum = sum(policy.values())
+  for action, p in policy.items():
     node.children[action] = Node(p / policy_sum)
   return value
 
@@ -517,6 +560,18 @@ def evaluate(node: Node, game: Game, network: Network):
 # At the end of a simulation, we propagate the evaluation all the way up the
 # tree to the root.
 def backpropagate(search_path: List[Node], value: float, to_play):
+  """
+  Backpropagates the evaluation value through the Monte Carlo Tree Search (MCTS) tree.
+
+  Args:
+      - search_path (List[Node]): List of nodes representing the search path from the leaf to the root.
+      - value (float): The evaluation value to be backpropagated.
+      - to_play: The player to play at the terminal state.
+
+  Returns:
+      None
+
+  """
   for node in search_path:
     node.value_sum += value if node.to_play == to_play else (1 - value)
     node.visit_count += 1
@@ -525,7 +580,17 @@ def backpropagate(search_path: List[Node], value: float, to_play):
 # At the start of each search, we add dirichlet noise to the prior of the root
 # to encourage the search to explore new actions.
 def add_exploration_noise(config: AlphaZeroConfig, node: Node):
-  actions = node.children.keys()
+  """
+  Adds Dirichlet noise to the prior of the root to encourage exploration.
+
+  Args:
+    - config (AlphaZeroConfig): Configuration settings for AlphaZero.
+    - node (Node): The root node of the MCTS search tree.
+
+  Return:
+    - None
+  """
+  actions = list(node.children.keys())
   noise = numpy.random.gamma(config.root_dirichlet_alpha, 1, len(actions))
   frac = config.root_exploration_fraction
   for a, n in zip(actions, noise):
@@ -539,11 +604,20 @@ def add_exploration_noise(config: AlphaZeroConfig, node: Node):
 ####### Part 2: Training #########
 
 
-def train_network(config: AlphaZeroConfig, storage: SharedStorage,
-                  replay_buffer: ReplayBuffer):
+def train_network(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer):
+  """
+  Trains the neural network using self-play game data from the replay buffer.
+
+  Parameters:
+    - config (AlphaZeroConfig): Configuration settings for AlphaZero.
+    - storage (SharedStorage): Object responsible for storing and retrieving neural network checkpoints during training.
+    - replay_buffer (ReplayBuffer): Buffer containing self-play games for training.
+
+  Returns:
+    None
+  """
   network = Network()
-  optimizer = tf.train.MomentumOptimizer(config.learning_rate_schedule,
-                                         config.momentum)
+  optimizer = tf.train.MomentumOptimizer(config.learning_rate_schedule, config.momentum)
   for i in range(config.training_steps):
     if i % config.checkpoint_interval == 0:
       storage.save_network(i, network)
@@ -554,6 +628,18 @@ def train_network(config: AlphaZeroConfig, storage: SharedStorage,
 
 def update_weights(optimizer: tf.train.Optimizer, network: Network, batch,
                    weight_decay: float):
+  """
+  Updates the weights of the neural network based on the training batch.
+
+  Parameters:
+    - `optimizer` (tf.train.Optimizer): TensorFlow optimizer for weight updates.
+    - `network` (Network): Neural network instance to be updated.
+    - `batch` (List[Tuple[List[numpy.array], Tuple[float, List[float]]]]): Training batch containing game states and target values.
+    - `weight_decay` (float): Coefficient for L2 regularization.
+
+  Returns:
+    None
+  """
   loss = 0
   for image, (target_value, target_policy) in batch:
     value, policy_logits = network.inference(image)
