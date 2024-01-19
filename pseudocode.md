@@ -59,6 +59,21 @@ class AlphaZeroConfig(object):
 
 ```python
 class Node(object):
+  """
+  Represents a node in the Monte Carlo Tree Search (MCTS) algorithm.
+
+  Attributes:
+    - visit_count (int): Number of times the node has been visited during the search.
+    - to_play (int): Player to play at the node.
+    - prior (float): Prior probability of selecting the node.
+    - value_sum (float): Sum of values encountered during the search.
+    - children (Dict[int, Node]): Child nodes of the current node.
+
+  Methods:
+    - expanded -> bool: Checks if the node has been expanded (has children).
+    - value -> float: Returns the average value of the node.
+  """
+
   def __init__(self, prior: float):
     self.visit_count = 0
     self.to_play = -1
@@ -67,12 +82,25 @@ class Node(object):
     self.children = {}
 
   def expanded(self) -> bool:
+    """
+    Checks if the node has been expanded (has children).
+
+    Returns:
+        bool: True if the node has children, False otherwise.
+    """
     return len(self.children) > 0
 
   def value(self) -> float:
+    """
+    Returns the average value of the node.
+
+    Returns:
+        float: The average value of the node.
+    """
     if self.visit_count == 0:
       return 0
     return self.value_sum / self.visit_count
+
 ```
 
 - Represents a node in the Monte Carlo Tree Search (MCTS) algorithm. It will need to be modified to include the state of the simulation.
@@ -501,9 +529,9 @@ def alphazero(config: AlphaZeroConfig) -> 'Network':
 
   Note: Given that we can only launch one instance of the CARLA client so far -yet-, the `alphazero()` function should be modified by removing the `launch_job()` call and calling `run_selfplay()` directly.
 
-### Self-Play Functions
+## Self-Play Functions
 
-#### Selfplay
+### Selfplay
 
 ```python
 def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer):
@@ -535,7 +563,7 @@ def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer:
 
   Note: This function is intended to be executed in parallel, and its main purpose is to continuously generate self-play games and store them in the replay buffer. If parallel execution is not possible, the `while True` loop should be exchanged for a `for` loop with specified termination settings.
 
-#### Play game
+### Play game
 
 ```python
 def play_game(config: AlphaZeroConfig, network: Network) -> 'Game':
@@ -573,7 +601,7 @@ def play_game(config: AlphaZeroConfig, network: Network) -> 'Game':
 
   Note: This function is a crucial part of the self-play process and is designed to interact with the neural network to make decisions during gameplay.
 
-#### Run MCTS
+### Run MCTS
 
 ```python
 def run_mcts(config: AlphaZeroConfig, game: Game, network: Network) -> Tuple[int, Node]:
@@ -629,7 +657,7 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network) -> Tuple[int
     - Selects the best action based on the accumulated statistics in the root node.
     - Returns the selected action and the root node of the search tree.
 
-#### Select action
+### Select action
 
 ```python
 def select_action(config: AlphaZeroConfig, game: Game, root: Node) -> int:
@@ -667,7 +695,7 @@ def select_action(config: AlphaZeroConfig, game: Game, root: Node) -> int:
   - In the exploitation phase, it selects the action with the highest visit count.
 - Note: replaced `root.children.iteritems()` (python-2 syntax) with `root.children.items()`.
 
-#### Select child
+### Select child
 
 ```python
 def select_child(config: AlphaZeroConfig, node: Node) -> Tuple[int, Node]:
@@ -698,7 +726,7 @@ def select_child(config: AlphaZeroConfig, node: Node) -> Tuple[int, Node]:
   - Computes the UCB score for each child node based on exploration and exploitation factors.
   - Selects the child with the highest UCB score.
 
-#### Upper confidence bound formula
+### Upper confidence bound formula
 
 ```python
 def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node) -> float:
@@ -732,7 +760,7 @@ def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node) -> float:
   - Uses the formula and parameters specified by the AlphaZero configuration.
 
 
-#### Evaluate network on a Node
+### Evaluate network on a Node
 
 ```python
 def evaluate(node: Node, game: Game, network: Network) -> float:
@@ -768,7 +796,7 @@ def evaluate(node: Node, game: Game, network: Network) -> float:
   - It uses the neural network to perform an inference on the image representation of the current game state.
   - The predicted value is returned, representing the expected outcome of the game state according to the neural network.
 
-#### Backpropagate reward
+### Backpropagate reward
 
 ```python
 def backpropagate(search_path: List[Node], value: float, to_play):
@@ -800,7 +828,7 @@ def backpropagate(search_path: List[Node], value: float, to_play):
   - At the end of a simulation, propagates the evaluation all the way up the tree to the root.
   - Updates the visit counts and value estimates of nodes in the search path.
 
-#### Add exploration noise
+### Add exploration noise
 
 ```python
 def add_exploration_noise(config: AlphaZeroConfig, node: Node):
@@ -832,9 +860,9 @@ def add_exploration_noise(config: AlphaZeroConfig, node: Node):
   - Applies the noise to the prior probabilities of child nodes in the root.
   - Balances exploration (randomness) and exploitation during the MCTS algorithm.
 
-### Training Functions
+## Training Functions
 
-#### Train network
+### Train network
 
 ```python
 def train_network(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer):
@@ -858,6 +886,7 @@ def train_network(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer
     update_weights(optimizer, network, batch, config.weight_decay)
   storage.save_network(config.training_steps, network)
 ```
+
 - Trains the neural network using self-play game data from the replay buffer.
 - Parameters:
   - `config`: Configuration settings for AlphaZero.
@@ -872,7 +901,7 @@ def train_network(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer
   - Samples a batch from the replay buffer for training.
   - Updates the network weights using backpropagation and optimization.
 
-#### Network coefficient update
+### Network coefficient update
 
 ```python
 def update_weights(optimizer: tf.train.Optimizer, network: Network, batch,
@@ -919,7 +948,7 @@ def update_weights(optimizer: tf.train.Optimizer, network: Network, batch,
   - Applies L2 regularization to the weights.
   - Minimizes the combined loss using the optimizer.
 
-### Stubs
+## Stubs
 
 ```python
 def softmax_sample(d):

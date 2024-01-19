@@ -44,6 +44,20 @@ class AlphaZeroConfig(object):
     }
 
 class Node(object):
+  """
+  Represents a node in the Monte Carlo Tree Search (MCTS) algorithm.
+
+  Attributes:
+    - visit_count (int): Number of times the node has been visited during the search.
+    - to_play (int): Player to play at the node.
+    - prior (float): Prior probability of selecting the node.
+    - value_sum (float): Sum of values encountered during the search.
+    - children (Dict[int, Node]): Child nodes of the current node.
+
+  Methods:
+    - expanded -> bool: Checks if the node has been expanded (has children).
+    - value -> float: Returns the average value of the node.
+  """
 
   def __init__(self, prior: float):
     self.visit_count = 0
@@ -53,9 +67,21 @@ class Node(object):
     self.children = {}
 
   def expanded(self) -> bool:
+    """
+    Checks if the node has been expanded (has children).
+
+    Returns:
+        bool: True if the node has children, False otherwise.
+    """
     return len(self.children) > 0
 
   def value(self) -> float:
+    """
+    Returns the average value of the node.
+
+    Returns:
+        float: The average value of the node.
+    """
     if self.visit_count == 0:
       return 0
     return self.value_sum / self.visit_count
