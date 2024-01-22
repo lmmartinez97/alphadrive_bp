@@ -37,10 +37,10 @@ def update_weights(optimizer: tf.train.Optimizer, network: Network, batch,
   Updates the weights of the neural network based on the training batch.
 
   Parameters:
-    - `optimizer` (tf.train.Optimizer): TensorFlow optimizer for weight updates.
-    - `network` (Network): Neural network instance to be updated.
-    - `batch` (List[Tuple[List[numpy.array], Tuple[float, List[float]]]]): Training batch containing game states and target values.
-    - `weight_decay` (float): Coefficient for L2 regularization.
+    - optimizer (tf.train.Optimizer): TensorFlow optimizer for weight updates.
+    - network (Network): Neural network instance to be updated.
+    - batch (List[Tuple[List[numpy.array], Tuple[float, List[float]]]]): Training batch containing game states and target values.
+    - weight_decay (float): Coefficient for L2 regularization.
 
   Returns:
     None
