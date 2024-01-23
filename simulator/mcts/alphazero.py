@@ -10,22 +10,43 @@ from self_play import run_selfplay
 from training import train_network
 from utils import launch_job
 
-def alphazero(config: AlphaZeroConfig) -> 'Network':
-  """
-  The main function that coordinates the AlphaZero training process.
+def alphazero() -> "Network":
+    """
+    The main function that coordinates the AlphaZero training process.
 
-  Args:
-    config (AlphaZeroConfig): Configuration settings for AlphaZero.
+    Returns:
+      'Network': The latest trained neural network.
+    """
+    config_dict = {
+        "num_actors": 5000,
+        "num_sampling_moves": 30,
+        "max_moves": 512,
+        "num_simulations": 800,
+        "root_dirichlet_alpha": 0.3,
+        "root_exploration_fraction": 0.25,
+        "pb_c_base": 19652,
+        "pb_c_init": 1.25,
+        "network_arch": [200, 128, 64, 16],
+        "training_steps": int(700e3),
+        "checkpoint_interval": int(1e3),
+        "training_iterations": 60,
+        "games_per_iteration": 50,
+        "window_size": int(1e6),
+        "batch_size": 4096,
+        "weight_decay": 1e-4,
+        "momentum": 0.9,
+        "learning_rate_schedule": {0: 2e-1, 100e3: 2e-2, 300e3: 2e-3, 500e3: 2e-4},
+    }
+    config = AlphaZeroConfig(config_dict)
+    storage = SharedStorage()
+    replay_buffer = ReplayBuffer(config)
+    
+    for i in range(config.training_iterations):
+        print(f"Iteration {i+1}/{config.training_iterations}")
+        run_selfplay(config, storage, replay_buffer)
+        train_network(config, storage, replay_buffer)
 
-  Returns:
-    'Network': The latest trained neural network.
-  """
-  storage = SharedStorage()
-  replay_buffer = ReplayBuffer(config)
-
-  for i in range(config.num_actors):
-    launch_job(run_selfplay, config, storage, replay_buffer)
-
-  train_network(config, storage, replay_buffer)
-
-  return storage.latest_network()
+    latest_network = storage.latest_network()
+    latest_network.save_model("latest_network")
+    
+    return storage.latest_network()

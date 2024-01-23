@@ -20,9 +20,9 @@ def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage, replay_buffer:
     Continuously runs self-play to generate game data for training.
 
     Parameters:
-      - `config`: Instance of the `AlphaZeroConfig` class that contains parameters for execution and training.
-      - `storage`: Object responsible for storing and retrieving neural network checkpoints during training.
-      - `replay_buffer`: Buffer for storing self-play games to be used in training.
+      - config: Instance of the AlphaZeroConfig class that contains parameters for execution and training.
+      - storage: Object responsible for storing and retrieving neural network checkpoints during training.
+      - replay_buffer: Buffer for storing self-play games to be used in training.
 
   """
   while True:
@@ -39,11 +39,11 @@ def play_game(config: AlphaZeroConfig, network: Network) -> 'Game':
     Plays a single game using Monte Carlo Tree Search (MCTS).
 
     Args:
-      - config: Instance of the `AlphaZeroConfig` class containing parameters for execution and training.
-      - network: Instance of the `Network` class representing the current neural network model.
+      - config: Instance of the AlphaZeroConfig class containing parameters for execution and training.
+      - network: Instance of the Network class representing the current neural network model.
 
-      Returns:
-        - game: The final state of the game after completing the self-play.
+    Returns:
+      - game: The final state of the game after completing the self-play.
 
   """
   game = Game()
