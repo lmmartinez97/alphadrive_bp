@@ -6,9 +6,10 @@ from __future__ import division
 
 import numpy
 import tensorflow as tf
-from typing import List, Tuple
 
+from copy import deepcopy
 from network import Network
+from typing import List, Tuple
 from utils import make_uniform_network
 
 ##########################
@@ -300,10 +301,10 @@ class SharedStorage(object):
           'Network': The latest stored network checkpoint.
         """
         if self._networks:
-            return self._networks[max(self._networks.keys())]
+            return deepcopy(self._networks[max(self._networks.keys())]) #return copy of Network so that it can be modified without affecting the original
         else:
             return (
-                make_uniform_network()
+                (0.5, [1/3 for _ in range(3)]),
             )  # Placeholder: Policy -> uniform, value -> 0.5
 
     def save_network(self, step: int, network: "Network") -> None:
