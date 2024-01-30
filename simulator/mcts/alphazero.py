@@ -1,7 +1,6 @@
 """AlphaZero training loop."""
 
 
-from __future__ import google_type_annotations
 from __future__ import division
 
 from helpers import SharedStorage, ReplayBuffer, AlphaZeroConfig

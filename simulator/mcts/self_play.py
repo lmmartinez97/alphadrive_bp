@@ -1,7 +1,6 @@
 """Selfplay functions for the AlphaZero algorithm."""
 
 
-from __future__ import google_type_annotations
 from __future__ import division
 
 import math

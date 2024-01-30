@@ -1,7 +1,6 @@
 """Network class for the AlphaZero algorithm."""
 
 
-from __future__ import google_type_annotations
 from __future__ import division
 
 import numpy
@@ -13,17 +12,54 @@ from tensorflow import keras
 from tensorflow.keras import layers, models
 
 from typing import List, Tuple
-from helpers import AlphaZeroConfig, SharedStorage, ReplayBuffer
 
 # https://stackoverflow.com/questions/44036971/multiple-outputs-in-keras
 
 class Network(object):
+    """
+    A class used to represent the Neural Network for the AlphaZero algorithm.
+
+    ...
+
+    Attributes
+    ----------
+    arch : List[int]
+        a list of integers representing the architecture of the neural network
+    model : keras.Model
+        a keras model representing the neural network
+
+    Methods
+    -------
+    build_model():
+        Builds the keras model based on the architecture provided during initialization.
+
+    inference(image: List[numpy.array]) -> Tuple[float, List[float]]:
+        Makes a prediction based on the provided image.
+
+    train(batch) -> None:
+        Trains the model on the provided batch of data.
+    """
     def __init__(self, config: List[int] = None) -> None:
-        
+        """
+        Constructs all the necessary attributes for the Network object.
+
+        Parameters
+        ----------
+            config : List[int], optional
+                The architecture of the neural network (default is None)
+        """
         self.arch = config
         self.model = self.build_model()
 
     def build_model(self):
+        """
+        Builds the keras model based on the architecture provided during initialization.
+
+        Returns
+        -------
+        keras.Model
+            The built keras model.
+        """
         x = layers.Input(shape=(self.arch[0],))
         for units in self.arch[1:]:
             x = layers.Dense(units, activation='relu')(x)
@@ -36,9 +72,30 @@ class Network(object):
         return self.model
 
     def inference(self, image: List[numpy.array]) -> Tuple[float, List[float]]:
+        """
+        Makes a prediction based on the provided image.
+
+        Parameters
+        ----------
+        image : List[numpy.array]
+            The image to make a prediction on.
+
+        Returns
+        -------
+        Tuple[float, List[float]]
+            The predicted value and policy.
+        """
         return self.model.predict(image)
 
     def train(self, batch) -> None:
+        """
+        Trains the model on the provided batch of data.
+
+        Parameters
+        ----------
+        batch : List[Tuple]
+            The batch of data to train on.
+        """
         states, targets = zip(*batch)
         value_targets, policy_targets = zip(*targets)
         
@@ -111,24 +168,4 @@ class Network(object):
             return False
 
 
-def train_network(
-    config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer, training_iter: int, path: str
-):
-    """
-    Trains the neural network using self-play game data from the replay buffer.
 
-    Parameters:
-      - config (AlphaZeroConfig): Configuration settings for AlphaZero.
-      - storage (SharedStorage): Object responsible for storing and retrieving neural network checkpoints during training.
-      - replay_buffer (ReplayBuffer): Buffer containing self-play games for training.
-      - training_iter (int): The current training iteration.
-      - path (str): The path to the directory where the model will be saved.
-
-    Returns:
-      None
-    """
-    network = storage.latest_network()
-    batch = replay_buffer.sample_batch()
-    network.train(batch=batch)
-    network.save_model(path + "/" + f"network_{training_iter}")
-    storage.save_network(training_iter, network)
