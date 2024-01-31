@@ -3,10 +3,10 @@
 
 from __future__ import division
 
-from mcts.helpers import SharedStorage, ReplayBuffer, AlphaZeroConfig
-from mcts.network import Network, train_network
-from mcts.self_play import run_selfplay
-from mcts.utils import create_directory
+from modules.mcts.helpers import SharedStorage, ReplayBuffer, AlphaZeroConfig
+from modules.mcts.network import Network, train_network
+from modules.mcts.self_play import run_selfplay
+from modules.mcts.utils import create_directory
 
 def alphazero() -> "Network":
     """
