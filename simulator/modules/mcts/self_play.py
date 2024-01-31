@@ -10,13 +10,13 @@ from helpers import SharedStorage, ReplayBuffer, AlphaZeroConfig, Game, Node
 from network import Network
 from typing import List, Tuple
 from utils import softmax_sample
-
+from ..carla.simulation import Simulation
 
 # Each self-play job is independent of all others; it takes the latest network
 # snapshot, produces a game and makes it available to the training job by
 # writing it to a shared replay buffer.
 def run_selfplay(
-    config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer
+    config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer, simulation: Simulation,
 ):
     """
     Continuously runs self-play to generate game data for training.
@@ -30,14 +30,14 @@ def run_selfplay(
     network = storage.latest_network()
 
     for _ in range(config.games_per_iteration):
-        game = play_game(config, network)
+        game = play_game(config, network, simulation)
         replay_buffer.save_game(game)
 
 
 # Each game is produced by starting at the initial board position, then
 # repeatedly executing a Monte Carlo Tree Search to generate moves until the end
 # of the game is reached.
-def play_game(config: AlphaZeroConfig, network: Network) -> "Game":
+def play_game(config: AlphaZeroConfig, network: Network, simulation: Simulation) -> "Game":
     """
     Plays a single game using Monte Carlo Tree Search (MCTS).
 
@@ -52,7 +52,7 @@ def play_game(config: AlphaZeroConfig, network: Network) -> "Game":
     game = Game()
     while not game.terminal() and len(game.history) < config.max_moves:
         action, root = run_mcts(config, game, network)
-        game.apply(action)
+        game.apply(action, simulation)
         game.store_search_statistics(root)
     return game
 
@@ -61,7 +61,7 @@ def play_game(config: AlphaZeroConfig, network: Network) -> "Game":
 # To decide on an action, we run N simulations, always starting at the root of
 # the search tree and traversing the tree according to the UCB formula until we
 # reach a leaf node.
-def run_mcts(config: AlphaZeroConfig, game: Game, network: Network) -> Tuple[int, Node]:
+def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: Simulation) -> Tuple[int, Node]:
     """
     Runs the Monte Carlo Tree Search (MCTS) algorithm to select the best action.
 
@@ -84,7 +84,7 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network) -> Tuple[int
 
         while node.expanded():
             action, node = select_child(config, node)
-            scratch_game.apply(action)
+            scratch_game.apply(action=action, simulation=simulation)
             search_path.append(node)
 
         value = evaluate(node, scratch_game, network)

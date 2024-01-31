@@ -5,9 +5,10 @@ from __future__ import division
 
 import os
 import datetime
+
+from helpers import AlphaZeroConfig, SharedStorage, ReplayBuffer
 from network import Network
-
-
+from typing import str
 # Stubs to make the typechecker happy, should not be included in pseudocode
 # for the paper.
 def softmax_sample(d):
@@ -43,17 +44,19 @@ def train_network(
     network.save_model(path + "/" + f"network_{training_iter}")
     storage.save_network(training_iter, network)
 
-def create_directory(base_path):
-    # Get the current date and time
+def create_directory(base_path: str) -> str:
+    """
+    Creates a new directory with the current date and time as its name.
+
+    Args:
+        base_path (str): The base path where the new directory will be created.
+
+    Returns:
+        str: The full path of the created directory.
+    """
     now = datetime.now()
-
-    # Format the date and time as a string
     dir_name = now.strftime("%Y-%m-%d_%H-%M-%S")
-
-    # Create the full path to the new directory
     full_path = os.path.join(base_path, dir_name)
-
-    # Create the new directory
     os.makedirs(full_path, exist_ok=True)
 
     return full_path

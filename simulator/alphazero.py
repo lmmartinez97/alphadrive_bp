@@ -4,10 +4,10 @@
 from __future__ import division
 
 from modules.mcts.helpers import SharedStorage, ReplayBuffer, AlphaZeroConfig
-from modules.mcts.network import Network, train_network
+from modules.mcts.network import Network
 from modules.mcts.self_play import run_selfplay
-from modules.mcts.utils import create_directory
-
+from modules.mcts.utils import create_directory, train_network
+from modules.carla.simulation import Simulation
 def alphazero() -> "Network":
     """
     The main function that coordinates the AlphaZero training process.
@@ -38,12 +38,13 @@ def alphazero() -> "Network":
     config = AlphaZeroConfig(config_dict)
     storage = SharedStorage()
     replay_buffer = ReplayBuffer(config)
+    simulation = Simulation()
 
     storage.save_network(0, Network(config.network_arch))
     save_path = create_directory("../checkpoints")
     for i in range(config.training_iterations):
         print(f"Iteration {i+1}/{config.training_iterations}")
-        run_selfplay(config, storage, replay_buffer)
+        run_selfplay(config=config, storage=storage, replay_buffer=replay_buffer, simulation=simulation)
         train_network(config=config, storage=storage, replay_buffer=replay_buffer, training_iter=i, path=save_path)
 
     latest_network = storage.latest_network()

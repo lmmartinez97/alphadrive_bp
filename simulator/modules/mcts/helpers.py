@@ -3,6 +3,7 @@
 
 from __future__ import division
 
+import copy
 import numpy
 import tensorflow as tf
 
@@ -10,6 +11,8 @@ from copy import deepcopy
 from network import Network
 from typing import List, Tuple
 from utils import make_uniform_network
+
+from ..carla.simulation import Simulation
 
 ##########################
 ####### Helpers ##########
@@ -107,7 +110,7 @@ class Game(object):
           It is the total number of possible actions that can be taken by a player.
     """
 
-    def __init__(self, history: List[int] = None):
+    def __init__(self, action_history: List[int] = None, state_history: List[numpy.array] = None):
         """
         Initializes a new Game instance.
 
@@ -115,7 +118,8 @@ class Game(object):
             history (List[int], optional): List of actions representing the game history.
                 Defaults to an empty list.
         """
-        self.history = history or []
+        self.action_history = action_history or []
+        self.state_history = state_history or []
         self.child_visits = []
         self.num_actions = (
             4672  # action space size for chess; 11259 for shogi, 362 for Go
@@ -161,9 +165,9 @@ class Game(object):
         Returns:
             Game: A new instance representing a copy of the game state.
         """
-        return Game(list(self.history))
+        return copy.deepcopy(self)
 
-    def apply(self, action: int):
+    def apply(self, action: int, simulation: Simulation):
         """
         Applies an action to the game state.
 

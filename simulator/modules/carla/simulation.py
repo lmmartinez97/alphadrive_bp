@@ -50,8 +50,10 @@ from carla import ColorConverter as cc
 # ==============================================================================
 
 
-from modules.keyboard_control import KeyboardControl
-from modules.printers import print_blue, print_green, print_highlight, print_red
+from keyboard_control import KeyboardControl
+from printers import print_blue, print_green, print_highlight, print_red
+from world import World
+from hud import HUD
 
 from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
 from agents.navigation.behavior_agent import (

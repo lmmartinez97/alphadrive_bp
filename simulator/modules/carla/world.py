@@ -46,11 +46,11 @@ from printers import print_blue, print_green, print_highlight, print_red
 from sensors import CollisionSensor, GnssSensor, LaneInvasionSensor
 from utils import get_straight_angle
 
-from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
-from agents.navigation.behavior_agent import (
+from ..agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
+from ..agents.navigation.behavior_agent import (
     BehaviorAgent,
 )  # pylint: disable=import-error
-from agents.navigation.constant_velocity_agent import (
+from ..agents.navigation.constant_velocity_agent import (
     ConstantVelocityAgent,
 )  # pylint: disable=import-error
 
@@ -100,7 +100,7 @@ class World(object):
         self.recording_start = 0
         self.blueprint_toyota_prius = None
 
-        self.dataframe = pd.DataFrame()
+        self.dataframe = {}
 
         self.spawn_point_ego = carla.Transform(
             carla.Location(x=-850, y=-65, z=0.5), carla.Rotation(yaw=0, pitch=0, roll=0)
@@ -226,7 +226,6 @@ class World(object):
             bounding_box = vehicle.bounding_box
             state_dict = {
                 "id": vehicle.id,
-                "frame": frame_number,
                 "x": position.x,
                 "y": position.y,
                 "z": position.z,
@@ -243,7 +242,7 @@ class World(object):
                 "height": 2 * bounding_box.extent.y,
             }
         local_df = pd.concat([local_df, pd.DataFrame([state_dict])], ignore_index=True)
-        self.dataframe = pd.concat([self.dataframe, local_df])
+        self.dataframe[frame_number] = local_df
         return local_df
 
     def restore_frame_state(self, frame_number):
