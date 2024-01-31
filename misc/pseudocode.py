@@ -13,8 +13,6 @@ from typing import List, Tuple
 ##########################
 ####### Helpers ##########
 
-
-
 class AlphaZeroConfig(object):
   def __init__(self):
     # Self-Play

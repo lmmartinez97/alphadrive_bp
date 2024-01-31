@@ -89,6 +89,8 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network) -> Tuple[int
 
         value = evaluate(node, scratch_game, network)
         backpropagate(search_path, value, scratch_game.to_play())
+        #TODO: Return to root state
+        
     return select_action(config, game, root), root
 
 

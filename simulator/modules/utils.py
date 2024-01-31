@@ -1,5 +1,7 @@
 import numpy as np
 
+from typing import Tuple
+
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
     return vector / np.linalg.norm(vector)
@@ -52,7 +54,7 @@ def get_vector_angle(v):
     else:
         return get_angle_between(v, (1, 0, 0))
     
-def get_straight_angle(v1, v2):
+def get_straight_angle(v1: Tuple[float, float], v2: Tuple[float, float]) -> float:
     """
     Returns the angle in radians between the straight line formed by the end-point of vectors 'v1' and 'v2'
     and the x-axis.
