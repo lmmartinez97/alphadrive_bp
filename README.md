@@ -6,83 +6,86 @@ This repository contains the code associated to the PhD thesis _Behavior Plannin
 
 This section will be updated as the project is developed.
 
-As of 16/01/2024:
+As of 31/01/2024:
 
 ```bash
-├── envs
-│   ├── carla.env
-│   └── preprocessing.env
-├── pseudocode.md
-├── pseudocode.pdf
 ├── README.md
+├── envs
+│   ├── carla.env
+│   └── preprocessing.env
+├── misc
+│   ├── pseudocode_review
+│   │   ├── pseudocode.md
+│   │   ├── pseudocode.pdf
+│   │   └── pseudocode.py
+│   └── tests
+│       ├── async_logging
+│       │   ├── client.py
+│       │   ├── server.py
+│       │   ├── server_dash.py
+│       │   └── server_qt.py
+│       ├── server.py
+│       └── socket_logging
+│           ├── client
+│           │   ├── client_logger.py
+│           │   └── client_socket.py
+│           ├── server
+│           │   ├── server.py
+│           │   └── server_socket.py
+│           └── web_app
+│               ├── app.py
+│               └── templates
 ├── scene_representation
-│   ├── preprocessing
-│   │   ├── field_extraction.ipynb
-│   │   ├── field_extraction.py
-│   │   ├── group_extraction.ipynb
-│   │   ├── group_extraction.py
-│   │   ├── __init__.py
-│   │   └── read_csv.py
-│   └── training
-│       ├── autoencoder_training.ipynb
-│       └── saved_models
-│           ├── autoencoder_1_configs.json
-│           ├── autoencoder_1_decoder.h5
-│           ├── autoencoder_1_encoder.h5
-│           ├── autoencoder_1.h5
-│           ├── autoencoder_test_configs.json
-│           ├── autoencoder_test.h5
-│           ├── autoencoder_test_history1_configs.json
-│           ├── autoencoder_test_history1.h5
-│           ├── autoencoder_test_history_configs.json
-│           ├── autoencoder_test_history.h5
-│           ├── autoencoder_test_int_1_configs.json
-│           ├── autoencoder_test_int_1.h5
-│           ├── autoencoder_test_int_3_configs.json
-│           ├── autoencoder_test_int_3.h5
-│           └── autoencoder_test_int_3_notes.txt
+│   ├── preprocessing
+│   │   ├── __init__.py
+│   │   ├── field_extraction.ipynb
+│   │   ├── field_extraction.py
+│   │   ├── group_extraction.ipynb
+│   │   ├── group_extraction.py
+│   │   └── read_csv.py
+│   └── training
+│       ├── autoencoder_training.ipynb
+│       └── saved_models
+│           ├── ...
 ├── simulator
-│   ├── agents
-│   │   ├── navigation
-│   │   │   ├── basic_agent.py
-│   │   │   ├── behavior_agent.py
-│   │   │   ├── behavior_types.py
-│   │   │   ├── constant_velocity_agent.py
-│   │   │   ├── controller.py
-│   │   │   ├── global_route_planner.py
-│   │   │   └── local_planner.py
-│   │   └── tools
-│   │       └── misc.py
-│   ├── carla_client.py
-│   ├── modules
-│   │   ├── camera.py
-│   │   ├── hud.py
-│   │   ├── keyboard_control.py
-│   │   ├── logger.py
-│   │   ├── potential_field.py
-│   │   ├── printers.py
-│   │   ├── sensors.py
-│   │   ├── shared_mem.py
-│   │   ├── state_manager.py
-│   │   └── utils.py
-│   ├── pseudocode.py
-│   └── server.py
-├── tests
-│   ├── async_logging
-│   │   ├── client.py
-│   │   ├── server_dash.py
-│   │   ├── server.py
-│   │   └── server_qt.py
-│   └── socket_logging
-│       ├── client
-│       │   ├── client_logger.py
-│       │   └── client_socket.py
-│       ├── server
-│       │   ├── server.py
-│       │   └── server_socket.py
-│       └── web_app
-│           ├── app.py
-│           └── templates
+│   ├── __init__.py
+│   ├── alphazero.py
+│   ├── carla_client.py
+│   ├── checkpoints
+│   └── modules
+│       ├── __init__.py
+│       ├── agents
+│       │   ├── __init__.py
+│       │   ├── navigation
+│       │   │   ├── __init__.py
+│       │   │   ├── basic_agent.py
+│       │   │   ├── behavior_agent.py
+│       │   │   ├── behavior_types.py
+│       │   │   ├── constant_velocity_agent.py
+│       │   │   ├── controller.py
+│       │   │   ├── global_route_planner.py
+│       │   │   └── local_planner.py
+│       │   └── tools
+│       │       ├── __init__.py
+│       │       └── misc.py
+│       ├── camera.py
+│       ├── hud.py
+│       ├── keyboard_control.py
+│       ├── logger.py
+│       ├── mcts
+│       │   ├── __init__.py
+│       │   ├── helpers.py
+│       │   ├── network.py
+│       │   ├── self_play.py
+│       │   └── utils.py
+│       ├── potential_field.py
+│       ├── printers.py
+│       ├── sensors.py
+│       ├── shared_mem.py
+│       ├── simulation.py
+│       ├── state_manager.py
+│       ├── utils.py
+│       └── world.py
 └── ui
     └── README_ui.md
 ```
