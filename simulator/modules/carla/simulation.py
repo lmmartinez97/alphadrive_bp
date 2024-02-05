@@ -1,4 +1,4 @@
-
+"""SIMULATION MODULE"""
 from __future__ import print_function
 
 # ==============================================================================
@@ -50,18 +50,21 @@ from carla import ColorConverter as cc
 # ==============================================================================
 
 
-from keyboard_control import KeyboardControl
-from printers import print_blue, print_green, print_highlight, print_red
-from world import World
-from hud import HUD
+from .keyboard_control import KeyboardControl
+from .printers import print_blue, print_green, print_highlight, print_red
+from .world import World
+from .hud import HUD
+from .potential_field import PotentialField
 
-from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
-from agents.navigation.behavior_agent import (
+from ..agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
+from ..agents.navigation.behavior_agent import (
     BehaviorAgent,
 )  # pylint: disable=import-error
-from agents.navigation.constant_velocity_agent import (
+from ..agents.navigation.constant_velocity_agent import (
     ConstantVelocityAgent,
 )  # pylint: disable=import-error
+
+from .autoencoder import load_model
 
 class Simulation:
   
@@ -81,6 +84,8 @@ class Simulation:
         self.simulation_period = 0.01
         self.decision_period = 1
 
+        #load autoencoder
+        self.autoencoder = load_model(model_name= "autoencoder_1" ,directory="../scene_representation/training/saved_models")
         #init pygame
         pygame.init()
         pygame.font.init()
@@ -157,7 +162,8 @@ class Simulation:
     def game_step(self):
         self.clock.tick()
         timestamp = self.world.world.get_snapshot().timestamp
-        frame_df = self.world.record_frame_state(self.frame_counter)
+        frame_df = self.world.record_frame_state(frame_number=self.frame_counter)
+        self.field = 
         self.world.world.tick()
         self.world.tick(self.clock, self.episode_counter, self.frame_counter)
 

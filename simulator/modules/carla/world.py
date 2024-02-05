@@ -39,12 +39,12 @@ from carla import ColorConverter as cc
 # -- Local imports --- ---------------------------------------------------------
 # ==============================================================================
 
-from camera import CameraManager, StaticCamera
-from hud import HUD, get_actor_display_name
-from keyboard_control import KeyboardControl
-from printers import print_blue, print_green, print_highlight, print_red
-from sensors import CollisionSensor, GnssSensor, LaneInvasionSensor
-from utils import get_straight_angle
+from .camera import CameraManager, StaticCamera
+from .hud import HUD, get_actor_display_name
+from .keyboard_control import KeyboardControl
+from .printers import print_blue, print_green, print_highlight, print_red
+from .sensors import CollisionSensor, GnssSensor, LaneInvasionSensor
+from .utils import get_straight_angle
 
 from ..agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
 from ..agents.navigation.behavior_agent import (
@@ -100,14 +100,14 @@ class World(object):
         self.recording_start = 0
         self.blueprint_toyota_prius = None
 
-        self.dataframe = {}
+        self.dataframe_record = {}
 
         self.spawn_point_ego = carla.Transform(
             carla.Location(x=-850, y=-65, z=0.5), carla.Rotation(yaw=0, pitch=0, roll=0)
         ) #Spwan point for ego vehicle
 
         self.traj_angle = get_straight_angle(
-            (self.destination.x, self.destination.y),
+            (self.spawn_point_ego.location.x, self.spawn_point_ego.location.y + 1),
             (self.spawn_point_ego.location.x, self.spawn_point_ego.location.y),
         ) #Angle of trajectory - used for setting destination
         
@@ -242,7 +242,7 @@ class World(object):
                 "height": 2 * bounding_box.extent.y,
             }
         local_df = pd.concat([local_df, pd.DataFrame([state_dict])], ignore_index=True)
-        self.dataframe[frame_number] = local_df
+        self.dataframe_record[frame_number] = local_df
         return local_df
 
     def restore_frame_state(self, frame_number):
