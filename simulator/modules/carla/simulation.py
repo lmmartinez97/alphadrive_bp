@@ -162,8 +162,7 @@ class Simulation:
     def game_step(self):
         self.clock.tick()
         timestamp = self.world.world.get_snapshot().timestamp
-        frame_df = self.world.record_frame_state(frame_number=self.frame_counter)
-        self.field = 
+        frame_history = self.world.record_frame_state(frame_number=self.frame_counter)
         self.world.world.tick()
         self.world.tick(self.clock, self.episode_counter, self.frame_counter)
 

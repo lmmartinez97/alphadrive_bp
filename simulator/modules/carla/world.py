@@ -102,19 +102,14 @@ class World(object):
 
         self.dataframe_record = {}
 
+        self.distance = 300
         self.spawn_point_ego = carla.Transform(
             carla.Location(x=-850, y=-65, z=0.5), carla.Rotation(yaw=0, pitch=0, roll=0)
         ) #Spwan point for ego vehicle
-
-        self.traj_angle = get_straight_angle(
-            (self.spawn_point_ego.location.x, self.spawn_point_ego.location.y + 1),
-            (self.spawn_point_ego.location.x, self.spawn_point_ego.location.y),
-        ) #Angle of trajectory - used for setting destination
         
-        self.distance = 300
         self.destination = carla.Location(
-            x=self.spawn_point_ego.location.x + self.distance * np.cos(np.pi - self.traj_angle),
-            y=self.spawn_point_ego.location.y + self.distance * np.sin(np.pi - self.traj_angle),
+            x=self.spawn_point_ego.location.x + self.distance,
+            y=self.spawn_point_ego.location.y - 2, #straight in map is not completely straight
             z=self.spawn_point_ego.location.z,
         ) #Destination for ego vehicle
 
@@ -243,7 +238,24 @@ class World(object):
             }
         local_df = pd.concat([local_df, pd.DataFrame([state_dict])], ignore_index=True)
         self.dataframe_record[frame_number] = local_df
-        return local_df
+
+    def return_frame_history(self, frame_number: int, history_length: int):
+        """
+        Returns an appropiate dataframe to calculate a potential field instance.
+
+        Args:
+            frame_number (int): The frame number to return the state.
+            history_length (int): The length of the history to return.
+
+        Returns:
+            pd.DataFrame: A dataframe with the state history of all vehicles
+        """
+        history = pd.DataFrame()
+        for i in range(history_length):
+            history = pd.concat(
+                [history, self.dataframe_record[frame_number - i]], ignore_index=True
+            )
+        return history
 
     def restore_frame_state(self, frame_number):
         """
