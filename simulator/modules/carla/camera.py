@@ -68,7 +68,7 @@ class CameraManager(object):
                 attachment.Rigid,
             ),
         ]
-        self.transform_index = 1
+        self.transform_index = 0
         self.sensors = [
             ["sensor.camera.rgb", cc.Raw, "Camera RGB"],
             ["sensor.camera.depth", cc.Raw, "Camera Depth (Raw)"],

@@ -90,6 +90,14 @@ class Simulation:
         pygame.init()
         pygame.font.init()
 
+        #potential field instance
+        rx = 50 # horizontal semiaxis of ellipse to consider as ROI
+        ry = 6 # vertical semiaxis of ellipse to consider as ROI
+        sx = 0.5
+        sy = 0.1
+        self.potential_field = PotentialField(radius_x = rx, radius_y = ry, step_x = sx, step_y = sy)
+
+        #include static camera
         if args.static_camera:
             args.width *= 2
         # initialize display
@@ -163,6 +171,7 @@ class Simulation:
         self.clock.tick()
         timestamp = self.world.world.get_snapshot().timestamp
         frame_history = self.world.record_frame_state(frame_number=self.frame_counter)
+        #self.potential_field.update(frame_history)
         self.world.world.tick()
         self.world.tick(self.clock, self.episode_counter, self.frame_counter)
 

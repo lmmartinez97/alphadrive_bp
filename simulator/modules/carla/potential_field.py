@@ -14,11 +14,10 @@ class PotentialField:
         step_x, step_y: space discretization in each axis
         df_group_list: a list of vehicle grups as imported by the function read_groups of read_csv.py
     '''
-    def __init__(self, radius_x, radius_y, step_x, step_y, dataframe = None):
+    def __init__(self, radius_x: int = 50, radius_y: int = 6, step_x: float = 0.5, step_y: float = 0.1):
         self.rx, self.ry = radius_x, radius_y
         self.sx, self.sy = step_x, step_y
         self.dataframe = None
-
         self.num_x = int(2*self.rx / self.sx) + 1
         self.num_y = int(2*self.ry / self.sy) + 1
         self.grid = np.zeros([self.num_y, self.num_x], dtype = np.float32) #x dimension is rows, y dimension is columns
@@ -102,7 +101,7 @@ class PotentialField:
             Returns:
                 An np.array in which each element is the potential field representation of the associated group.
         '''
-        self.field_list = []
+        self.field_list = None
         self.dataframe["frame"] = - self.dataframe["frame"] + self.dataframe["frame"].max() + 1 # determine relative frame step to atenuate distant values
         #Current frame will have a value of 1, previous frame will have a value of 2, nth frame will have a value of n
         ego_vehicle_id = self.dataframe.iloc[0].id

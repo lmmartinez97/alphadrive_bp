@@ -183,7 +183,7 @@ def main():
     logging.info("listening to server %s:%s", args.host, args.port)
 
     try:
-        simulation = Simulation(args=args, frame_limit=1000, episode_limit=100)
+        simulation = Simulation(args=args, frame_limit=10000, episode_limit=100)
         simulation.run()
 
     except KeyboardInterrupt as e:

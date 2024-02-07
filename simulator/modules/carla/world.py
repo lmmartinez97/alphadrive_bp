@@ -214,6 +214,11 @@ class World(object):
         """
         local_df = pd.DataFrame()
         for vehicle in self.world.get_actors().filter("vehicle.*"):
+            if vehicle.attributes["role_name"] == "hero":
+                hero = 1
+            else:
+                hero = 0
+            
             position = vehicle.get_location()
             rotation = vehicle.get_transform().rotation
             velocity = vehicle.get_velocity()
@@ -235,6 +240,7 @@ class World(object):
                 "zAngVelocity": ang_velocity.z,
                 "width": 2 * bounding_box.extent.x,
                 "height": 2 * bounding_box.extent.y,
+                "hero": hero
             }
         local_df = pd.concat([local_df, pd.DataFrame([state_dict])], ignore_index=True)
         self.dataframe_record[frame_number] = local_df
