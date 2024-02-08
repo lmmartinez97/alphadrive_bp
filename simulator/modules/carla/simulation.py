@@ -76,13 +76,20 @@ class Simulation:
         # simulation variables
         self.episode_counter = 0
         self.frame_counter = 0
+        self.args = args
         if not frame_limit:
             self.frame_limit = np.inf
         else:
             self.frame_limit = frame_limit
         self.episode_limit = episode_limit
         self.simulation_period = 0.01
-        self.decision_period = 1
+        self.decision_period_seconds = 1
+        self.decision_period = int(self.decision_period_seconds / self.simulation_period)
+        self.available_actions = {
+            0: 0, #do not introduce any offset
+            1: 4, #introduce a one lane offset to the right
+            2: -4 #introduce a one lane offset to the left
+        }
 
         #load autoencoder
         self.autoencoder = load_model(model_name= "autoencoder_1" ,directory="../scene_representation/training/saved_models")
@@ -98,16 +105,16 @@ class Simulation:
         self.potential_field = PotentialField(radius_x = rx, radius_y = ry, step_x = sx, step_y = sy)
 
         #include static camera
-        if args.static_camera:
-            args.width *= 2
+        if self.args.static_camera:
+            self.args.width *= 2
         # initialize display
         self.display = pygame.display.set_mode(
-            (args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF
+            (self.args.width, self.args.height), pygame.HWSURFACE | pygame.DOUBLEBUF
         )
         print("Created display")
 
         # init client and apply settings
-        self.client = carla.Client(args.host, args.port)
+        self.client = carla.Client(self.args.host, self.args.port)
         self.client.set_timeout(6.0)
         self.client.load_world("mergin_scene_1")
         # get traffic manager
@@ -115,34 +122,42 @@ class Simulation:
         self.sim_world = self.client.get_world()
 
         # initialize hud and world
-        self.hud = HUD(args.width, args.height, text=__doc__)
+        self.hud = HUD(self.args.width, self.args.height, text=__doc__)
         print("Created hud")
-        self.world = World(self.sim_world, self.hud, args)
+        self.world = World(self.sim_world, self.hud, self.args)
         print("Created world instance")
 
         self.controller = KeyboardControl(self.world)
+        self.clock = pygame.time.Clock()
 
+    def init_game(self):
+        """Method for initializing a new episode"""
+        self.world.restart(self.args)
         # initialize agent
         self.agent = None
-        if args.agent == "Basic":
+        if self.args.agent == "Basic":
             self.agent = BasicAgent(self.world.player, 30)
             self.agent.follow_speed_limits(True)
-        elif args.agent == "Constant":
+        elif self.args.agent == "Constant":
             self.agent = ConstantVelocityAgent(self.world.player, 30)
             ground_loc = self.world.world.ground_projection(self.world.player.get_location(), 5)
             if ground_loc:
                 self.world.player.set_location(ground_loc.location + carla.Location(z=0.01))
             self.agent.follow_speed_limits(True)
-        elif args.agent == "Behavior":
-            self.agent = BehaviorAgent(self.world.player, behavior=args.behavior)
+        elif self.args.agent == "Behavior":
+            self.agent = BehaviorAgent(self.world.player, behavior=self.args.behavior)
+            
+        #hand over control of npcs to traffic manager
+        self.traffic_manager.set_synchronous_mode(True)
+        for vehicle in range(self.npcs.num_players):
+            self.traffic_manager.auto_lane_change(vehicle, False)
+            self.traffic_manager.vehicle_percentage_speed_difference(vehicle, np.random.randint(-20, 20))
+            self.traffic_manager.distance_to_leading_vehicle(vehicle, 1)
+            self.traffic_manager.collision_detection(vehicle, self.world.player_ego, False)
+            self.traffic_manager.ignore_lights_percentage(vehicle, 0)
+            vehicle.set_autopilot(True)
+            
 
-        self.clock = pygame.time.Clock()
-
-    def init_game(self):
-        """Method for initializing a new episode
-        
-        TODO: Add support for multiple vehicles
-        """
         # Set the agent destination
         route = self.agent.set_destination(
             end_location=self.world.destination, start_location=self.world.spawn_point_ego.location
@@ -167,11 +182,10 @@ class Simulation:
                 life_time=100,
             )
     
-    def game_step(self):
+    def game_step(self, verbose = False, action = None, recording = False):
         self.clock.tick()
         timestamp = self.world.world.get_snapshot().timestamp
-        frame_history = self.world.record_frame_state(frame_number=self.frame_counter)
-        #self.potential_field.update(frame_history)
+
         self.world.world.tick()
         self.world.tick(self.clock, self.episode_counter, self.frame_counter)
 
@@ -181,23 +195,42 @@ class Simulation:
 
         if self.controller and self.controller.parse_events():
             return -1, -1, prev_timestamp
+        
+        if self.frame_counter % self.decision_period == 0 and action is not None:
+            self.agent._local_planner._vehicle_controller.set_offset(self.available_actions[action])
+        else:
+            self.agent._local_planner._vehicle_controller.set_offset(0)
 
+        self.world.record_frame_state(frame_number=self.frame_counter)
+        self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
+        pf = self.potential_field.calculate_field()
+        state = self.autoencoder.encode(pf).flatten()
+        
         control = self.agent.run_step()
         control.manual_gear_shift = False
         self.world.player.apply_control(control)
         #await send_log_data(log_host, log_port, frame_df)
         prev_timestamp = timestamp
 
-        if self.frame_counter % 100 == 0:
+        if verbose:
+            print("State: ", state)
+            print("State len: ", len(state))
             print("Frame: ", self.frame_counter)
             print("Control action: ", control)
+            self.potential_field.plot_field()
+            self.autoencoder.compare(pf, num_plots=1)
+            input("Press Enter to continue")
+            
+        return state
 
     def run(self):
         """Method for running the simulation"""
         self.init_game()
         while self.episode_counter < self.episode_limit:
             while (self.frame_counter < self.frame_limit) and not self.agent.done():
-                self.game_step()
+                if self.frame_counter % 100 == 0:
+                    verbose = True
+                self.game_step(verbose=verbose)
                 self.frame_counter += 1
             self.frame_counter = 0
             print("Restored frame state")

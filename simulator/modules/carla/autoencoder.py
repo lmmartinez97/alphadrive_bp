@@ -55,6 +55,9 @@ class AutoEncoder:
             'BatchNormalization': BatchNormalization,
             'Rescaling': Rescaling
         }
+        
+        self.min_scaler, self.max_scaler = [1.3206229756843115e-106, 117.8761944159839]
+        
     def buildModel(self, arch_config = None):
         """
         Build a Keras model based on the provided architecture configuration.
@@ -183,6 +186,33 @@ class AutoEncoder:
         predictions = self.model.predict(test_set)
         return predictions
     
+    def encode(self, data):
+        """
+        Generate latent vectors using the trained encoder model.
+
+        Args:
+            data (numpy.ndarray): Input data for encoding.
+
+        Returns:
+            numpy.ndarray: Latent vectors.
+        """
+        data = data * (self.max_scaler - self.min_scaler) + self.min_scaler
+        latent_vectors = self.encoder.predict(data, verbose = 0)
+        return latent_vectors
+    
+    def decode(self, latent_vectors):
+        """
+        Generate reconstructed data using the trained decoder model.
+
+        Args:
+            latent_vectors (numpy.ndarray): Latent vectors for decoding.
+
+        Returns:
+            numpy.ndarray: Reconstructed data.
+        """
+        reconstructed_data = self.decoder.predict(latent_vectors)
+        return reconstructed_data
+    
     def compare(self, test_set, num_plots = 3):
         """
         Compare original input data with reconstructed data and display the results.
@@ -192,8 +222,8 @@ class AutoEncoder:
             num_plots (int): Number of plots to generate for comparison.
         """
         idxs = np.random.choice(range(len(test_set)), size=num_plots)
-        print(idxs)
         test_samples = np.take(test_set, idxs, axis = 0)
+        test_samples = test_samples * (self.max_scaler - self.min_scaler) + self.min_scaler
         predictions = self.predict(test_samples)
         
         for (img, prediction, index) in zip(test_samples, predictions, idxs):

@@ -34,7 +34,7 @@ class PotentialField:
         self.grid = np.zeros([self.num_y, self.num_x], dtype = np.float32)
         self.dataframe = dataframe
 
-    def calculate_field(self, inner_group, ego_vehicle):
+    def calculate_field_ego(self, inner_group, ego_vehicle):
         '''
         Calculates the value of a potential field associated to an ego vehicle in the context of its group in a particular frame
         
@@ -92,7 +92,7 @@ class PotentialField:
 
         return grid
     
-    def calculate_field_list(self):
+    def calculate_field(self):
         '''
         Performs potential field calculations for every group in df_group_list
         
@@ -104,15 +104,15 @@ class PotentialField:
         self.field_list = None
         self.dataframe["frame"] = - self.dataframe["frame"] + self.dataframe["frame"].max() + 1 # determine relative frame step to atenuate distant values
         #Current frame will have a value of 1, previous frame will have a value of 2, nth frame will have a value of n
-        ego_vehicle_id = self.dataframe.iloc[0].id
+        ego_vehicle_id = self.dataframe[self.dataframe["hero"] == 1]["id"].iloc[0]
         temp_grid = np.zeros([self.num_y, self.num_x], dtype = np.float32) #x dimension is rows, y dimension is columns
         for frame_number, inner_group in self.dataframe.groupby("frame"): #add the field for every frame
             frame_attenuation = np.exp(-0.65*(inner_group.iloc[0].frame -1))
             ego_vehicle = inner_group[inner_group["id"] == ego_vehicle_id].iloc[0]
-            self.field_list = np.add(self.calculate_field(inner_group, ego_vehicle) * frame_attenuation, temp_grid)
+            self.field_list = np.add(self.calculate_field_ego(inner_group, ego_vehicle) * frame_attenuation, temp_grid)
         self.field_list = np.asarray(self.field_list)
 
-        return self.field_list
+        return self.field_list.reshape(-1, self.num_y, self.num_x, 1)
         
     def plot_field(self, idx = None):
         '''
@@ -137,7 +137,7 @@ class PotentialField:
 
         #plot heatmap
         ax2d = fig.add_subplot(1, 2, 2)
-        img = ax2d.imshow(self.field_list[idx])
+        img = ax2d.imshow(self.field_list)
         ax2d.set_xlabel("Longitudinal axis (px)")
         ax2d.set_ylabel("Transversal axis (px)")
         ax2d.set_title("Potential field heat map")
@@ -158,9 +158,9 @@ class PotentialField:
         if idx is None:
             idx = np.random.randint(len(self.field_list))
         fig, ax = plt.subplots()
-        y_index = int((self.field_list[idx].shape[0] - 1) / 2)
+        y_index = int((self.field_list.shape[0] - 1) / 2)
         x = self.x_pos
-        y = self.field_list[idx][y_index]
+        y = self.field_list[y_index]
         ax.plot(x, y)
         ax.set_xlabel("Transversal axis (m)")
         ax.set_ylabel("Potential field magnitude (-)")
@@ -168,7 +168,7 @@ class PotentialField:
 
         return fig
 
-    def plot_heat_map(self, idx):
+    def plot_heat_map(self, idx = None):
         '''
         Plots the heat map of the potential field of a given group in the variable idx.
         
@@ -177,10 +177,9 @@ class PotentialField:
             Returns:
                 None
         '''
-        if idx is None:
-            idx = np.random.randint(len(self.field_list))
+        idx = 1 if idx is None else idx
         fig, ax = plt.subplots()
-        ax.imshow(self.field_list[idx])
+        ax.imshow(self.field_list)
         ax.set_xlabel("Longitudinal axis (m)")
         ax.set_ylabel("Transversal axis (m)")
         ax.set_title(f"Potential field heat map - Frame {idx}")

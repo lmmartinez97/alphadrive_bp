@@ -99,6 +99,8 @@ class World(object):
         self.recording_enabled = False
         self.recording_start = 0
         self.blueprint_toyota_prius = None
+        
+        self.npcs = []
 
         self.dataframe_record = {}
 
@@ -129,7 +131,6 @@ class World(object):
 
     def spawn_ego_vehicle(self):
         """Spawn ego vehicle"""
-
         # Get a random blueprint.
         self.blueprint_toyota_prius = random.choice(
             self.world.get_blueprint_library().filter("vehicle.toyota.prius")
@@ -149,7 +150,42 @@ class World(object):
         self.modify_vehicle_physics(self.player)
         print("Spawned ego vehicle")
         self.world.tick()
+        
+    def spawn_npc_vehicles(self, number_of_vehicles):
+        """Spawn NPC vehicles"""
+        self.npcs.clear()
+        blueprint_library = self.world.get_blueprint_library()
+        blueprint = random.choice(blueprint_library.filter("vehicle.*.*"))
+        
+        # Initialize a list to store the positions of spawned vehicles
+        pos_list = []
+        # Define the spawn boundaries and minimum distance between vehicles
+        x_min, x_max = -950, -750
+        y_choices = [-65, -61]
+        min_distance = 15
 
+        for _ in range(number_of_vehicles):
+            x_spawn = np.random.randint(x_min, x_max)
+            y_spawn = np.random.choice(y_choices)
+            # If there are already vehicles spawned, ensure the new vehicle is not too close to others
+            if pos_list:
+                while min([np.linalg.norm(np.array([x_spawn, y_spawn]) - np.array(pos)) for pos in pos_list]) < min_distance:
+                    # If the vehicle is too close to others, generate a new spawn position
+                    x_spawn = np.random.randint(x_min, x_max)
+                    y_spawn = np.random.choice(y_choices)
+                    
+            loc = carla.Location(x=x_spawn, y=y_spawn, z=0.5)
+
+            spawn_point = carla.Transform(
+                loc,
+                carla.Rotation(yaw=0, pitch=0, roll=0),
+            )
+            vehicle = self.world.try_spawn_actor(blueprint, spawn_point)
+            self.modify_vehicle_physics(vehicle)
+            self.actor_list.append(vehicle)
+            self.npcs.append(vehicle)
+        print("Spawned NPC vehicles")
+        
     def setup_sensors(self):
         """Set up sensors"""
 
@@ -195,8 +231,9 @@ class World(object):
             if self.camera_manager is not None
             else 0
         )
-
+        self.dataframe_record.clear()
         self.spawn_ego_vehicle()
+        self.spawn_npc_vehicles(10)
         self.setup_sensors()
 
         if args.static_camera:
@@ -240,7 +277,8 @@ class World(object):
                 "zAngVelocity": ang_velocity.z,
                 "width": 2 * bounding_box.extent.x,
                 "height": 2 * bounding_box.extent.y,
-                "hero": hero
+                "hero": hero,
+                "frame": frame_number,
             }
         local_df = pd.concat([local_df, pd.DataFrame([state_dict])], ignore_index=True)
         self.dataframe_record[frame_number] = local_df
@@ -258,6 +296,8 @@ class World(object):
         """
         history = pd.DataFrame()
         for i in range(history_length):
+            if frame_number - i < 0:
+                break
             history = pd.concat(
                 [history, self.dataframe_record[frame_number - i]], ignore_index=True
             )
