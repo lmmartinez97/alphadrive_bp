@@ -125,7 +125,7 @@ class World(object):
         settings.max_substep_delta_time = 0.01
         settings.max_substeps = int(self.delta_simulated * 50)
         self.world.apply_settings(settings)
-        self.restart(args)
+        #self.restart(args)
 
         print("World created")
 
@@ -158,7 +158,7 @@ class World(object):
         blueprint = random.choice(blueprint_library.filter("vehicle.*.*"))
         
         # Initialize a list to store the positions of spawned vehicles
-        pos_list = []
+        pos_list = [[self.spawn_point_ego.location.x, self.spawn_point_ego.location.y]]
         # Define the spawn boundaries and minimum distance between vehicles
         x_min, x_max = -950, -750
         y_choices = [-65, -61]
@@ -173,8 +173,8 @@ class World(object):
                     # If the vehicle is too close to others, generate a new spawn position
                     x_spawn = np.random.randint(x_min, x_max)
                     y_spawn = np.random.choice(y_choices)
-                    
-            loc = carla.Location(x=x_spawn, y=y_spawn, z=0.5)
+            pos_list.append([x_spawn, y_spawn])
+            loc = carla.Location(x=float(x_spawn), y=float(y_spawn), z=0.5)
 
             spawn_point = carla.Transform(
                 loc,
@@ -185,11 +185,13 @@ class World(object):
             self.actor_list.append(vehicle)
             self.npcs.append(vehicle)
         print("Spawned NPC vehicles")
+        print(pos_list)
         
     def setup_sensors(self):
         """Set up sensors"""
-
+        print(self.player)
         self.collision_sensor = CollisionSensor(self.player, self.hud)
+
         self.lane_invasion_sensor = LaneInvasionSensor(self.player, self.hud)
         self.gnss_sensor = GnssSensor(self.player)
 
@@ -233,9 +235,9 @@ class World(object):
         )
         self.dataframe_record.clear()
         self.spawn_ego_vehicle()
-        self.spawn_npc_vehicles(10)
+        self.spawn_npc_vehicles(5)
         self.setup_sensors()
-
+        print("Sensors set up")
         if args.static_camera:
             self.static_camera_flag = self.setup_static_camera(args.width, args.height)
 

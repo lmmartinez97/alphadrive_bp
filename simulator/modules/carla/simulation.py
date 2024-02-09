@@ -149,11 +149,11 @@ class Simulation:
             
         #hand over control of npcs to traffic manager
         self.traffic_manager.set_synchronous_mode(True)
-        for vehicle in range(self.npcs.num_players):
+        for vehicle in self.world.npcs:
             self.traffic_manager.auto_lane_change(vehicle, False)
             self.traffic_manager.vehicle_percentage_speed_difference(vehicle, np.random.randint(-20, 20))
             self.traffic_manager.distance_to_leading_vehicle(vehicle, 1)
-            self.traffic_manager.collision_detection(vehicle, self.world.player_ego, False)
+            self.traffic_manager.collision_detection(vehicle, self.world.player, False)
             self.traffic_manager.ignore_lights_percentage(vehicle, 0)
             vehicle.set_autopilot(True)
             
@@ -198,6 +198,7 @@ class Simulation:
         
         if self.frame_counter % self.decision_period == 0 and action is not None:
             self.agent._local_planner._vehicle_controller.set_offset(self.available_actions[action])
+            self.decision_period += 1
         else:
             self.agent._local_planner._vehicle_controller.set_offset(0)
 
@@ -229,7 +230,7 @@ class Simulation:
         while self.episode_counter < self.episode_limit:
             while (self.frame_counter < self.frame_limit) and not self.agent.done():
                 if self.frame_counter % 100 == 0:
-                    verbose = True
+                    verbose = False
                 self.game_step(verbose=verbose)
                 self.frame_counter += 1
             self.frame_counter = 0
