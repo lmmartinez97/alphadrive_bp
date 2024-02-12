@@ -33,7 +33,8 @@ class AlphaZeroConfig:
 
     Attributes:
         num_actors (int): The number of actors for the self-play process.
-        num_sampling_moves (int): The number of moves to sample in the self-play process.
+        num_sampling_moves: The number of moves up to which actions are decided probabilisticly 
+                            -instead of greedily- in the self-play process.       
         max_moves (int): The maximum number of moves in a game.
         num_simulations (int): The number of Monte Carlo Tree Search simulations to run for each move.
         root_dirichlet_alpha (float): Parameter for exploration during MCTS.

@@ -8,19 +8,35 @@ import datetime
 
 from helpers import AlphaZeroConfig, SharedStorage, ReplayBuffer
 from network import Network
-from typing import str
-# Stubs to make the typechecker happy, should not be included in pseudocode
-# for the paper.
-def softmax_sample(d):
-    return 0, 0
+from typing import str, Lsit, Tuple
+#####################
+# MCTS functions   #
+#####################
 
+def softmax_sample(visit_counts: List[Tuple[int, int]]) -> Tuple[int, int]:
+    """
+    Selects an action probabilistically based on the visit counts using the softmax function.
+
+    Args:
+        visit_counts (List[Tuple[int, int]]): A list of tuples where each tuple contains the visit count and the corresponding action.
+
+    Returns:
+        Tuple[int, int]: The selected action and its visit count.
+    """
+    counts, actions = zip(*visit_counts)
+    probs = np.exp(counts) / np.sum(np.exp(counts))  # Apply softmax to visit counts
+    action = np.random.choice(actions, p=probs)  # Select action probabilistically
+    return action, dict(visit_counts)[action]
 
 def launch_job(f, *args):
     f(*args)
 
-
 def make_uniform_network():
     return Network()
+
+#####################
+# Utility functions #
+#####################
 
 def train_network(
     config: AlphaZeroConfig, storage: SharedStorage, replay_buffer: ReplayBuffer, training_iter: int, path: str
@@ -53,6 +69,10 @@ def create_directory(base_path: str) -> str:
 
     Returns:
         str: The full path of the created directory.
+        
+    Example:
+        >>> create_directory("/home/user/Documents")
+        '/home/user/Documents/2022-01-01_12-00-00'
     """
     now = datetime.now()
     dir_name = now.strftime("%Y-%m-%d_%H-%M-%S")

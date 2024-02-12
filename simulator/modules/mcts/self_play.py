@@ -22,9 +22,10 @@ def run_selfplay(
     Continuously runs self-play to generate game data for training.
 
     Parameters:
-      - config: Instance of the AlphaZeroConfig class that contains parameters for execution and training.
-      - storage: Object responsible for storing and retrieving neural network checkpoints during training.
-      - replay_buffer: Buffer for storing self-play games to be used in training.
+        config (AlphaZeroConfig): Instance of the AlphaZeroConfig class that contains parameters for execution and training.
+        storage (SharedStorage): Object responsible for storing and retrieving neural network checkpoints during training.
+        replay_buffer (ReplayBuffer): Buffer for storing self-play games to be used in training.
+        simulation (Simulation): Instance of the Simulation class that represents the game simulation.
 
     """
     network = storage.latest_network()
@@ -42,12 +43,12 @@ def play_game(config: AlphaZeroConfig, network: Network, simulation: Simulation)
     Plays a single game using Monte Carlo Tree Search (MCTS).
 
     Args:
-      - config: Instance of the AlphaZeroConfig class containing parameters for execution and training.
-      - network: Instance of the Network class representing the current neural network model.
+        config (AlphaZeroConfig): Instance of the AlphaZeroConfig class containing parameters for execution and training.
+        network (Network): Instance of the Network class representing the current neural network model.
+        simulation (Simulation): Instance of the Simulation class that represents the game simulation.
 
     Returns:
-      - game: The final state of the game after completing the self-play.
-
+        Game: The final state of the game after completing the self-play.
     """
     game = Game()
     while not game.terminal() and len(game.history) < config.max_moves:
@@ -66,31 +67,40 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
     Runs the Monte Carlo Tree Search (MCTS) algorithm to select the best action.
 
     Args:
-      config (AlphaZeroConfig): Configuration settings for AlphaZero.
-      game (Game): The current state of the game.
-      network (Network): The neural network used for value and policy predictions.
+        config (AlphaZeroConfig): Configuration settings for AlphaZero.
+        game (Game): The current state of the game.
+        network (Network): The neural network used for value and policy predictions.
+        simulation (Simulation): Instance of the Simulation class that represents the game simulation.
 
     Returns:
-      Tuple[int, Node]: The selected action and the root node of the search tree.
+        Tuple[int, Node]: The selected action and the root node of the search tree.
     """
+    # Initialize the root node
     root = Node(0)
+    
+    # Evaluate the root node
     evaluate(root, game, network)
+    
+    # Add exploration noise to the root node
     add_exploration_noise(config, root)
 
+    # Run the specified number of simulations
     for _ in range(config.num_simulations):
         node = root
         scratch_game = game.clone()
         search_path = [node]
 
+        # Traverse the tree until we reach an unexpanded node
         while node.expanded():
             action, node = select_child(config, node)
             scratch_game.apply(action=action, simulation=simulation)
             search_path.append(node)
 
+        # Evaluate the leaf node and propagate the value back up the search path
         value = evaluate(node, scratch_game, network)
         backpropagate(search_path, value, scratch_game.to_play())
-        #TODO: Return to root state
         
+    # Select the best action from the root node
     return select_action(config, game, root), root
 
 
@@ -98,19 +108,25 @@ def select_action(config: AlphaZeroConfig, game: Game, root: Node) -> int:
     """
     Selects the action to take based on the current game state and the MCTS search results.
 
+    During the initial phase of the game (as defined by `num_sampling_moves` in the config), 
+    actions are selected probabilistically based on the visit counts of the root's children, 
+    using a softmax function to give a higher probability to actions with higher visit counts.
+
+    After this initial phase, the action with the highest visit count is always selected.
+
     Args:
-      config (AlphaZeroConfig): Configuration settings for AlphaZero.
-      game (Game): The current state of the game.
-      root (Node): The root node of the MCTS search tree.
+        config (AlphaZeroConfig): Configuration settings for AlphaZero.
+        game (Game): The current state of the game.
+        root (Node): The root node of the MCTS search tree.
 
     Returns:
-      action: The selected action to take.
+        action: The selected action to take.
     """
     visit_counts = [
         (child.visit_count, action) for action, child in root.children.items()
     ]
     if len(game.history) < config.num_sampling_moves:
-        _, action = softmax_sample(visit_counts)
+        _, action = softmax_sample(visit_counts=visit_counts)
     else:
         _, action = max(visit_counts)
     return action
@@ -122,6 +138,11 @@ def select_action(config: AlphaZeroConfig, game: Game, root: Node) -> int:
 def select_child(config: AlphaZeroConfig, node: Node) -> Tuple[int, Node]:
     """
     Selects the child node with the highest UCB (Upper Confidence Bound) score.
+
+    The UCB score is a measure used in the Monte Carlo Tree Search (MCTS) algorithm to balance 
+    exploration and exploitation when selecting the next node to visit. It takes into account 
+    both the estimated value of a node (exploitation) and the uncertainty about that estimate 
+    (exploration).
 
     Args:
         config (AlphaZeroConfig): Configuration settings for AlphaZero.
@@ -143,6 +164,12 @@ def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node) -> float:
     """
     Calculates the Upper Confidence Bound (UCB) score for a child node in the Monte Carlo Tree Search (MCTS) algorithm.
 
+    The UCB score is a measure used in the MCTS algorithm to balance exploration and exploitation when selecting the next node to visit. 
+    It takes into account both the estimated value of a node (exploitation) and the uncertainty about that estimate (exploration).
+
+    The UCB score is calculated as the sum of the value score (the average value of the outcomes of the simulations that have passed through the node) 
+    and the prior score (a measure of the prior probability of the action that led to the node, adjusted for the number of times the parent node has been visited).
+
     Args:
       - config: (AlphaZeroConfig): Configuration settings for AlphaZero.
       - parent: (Node): The parent node in the search tree.
@@ -152,10 +179,10 @@ def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node) -> float:
       - float: The UCB score for the child node.
     """
     pb_c = (
-        math.log((parent.visit_count + config.pb_c_base + 1) / config.pb_c_base)
+        np.log((parent.visit_count + config.pb_c_base + 1) / config.pb_c_base)
         + config.pb_c_init
     )
-    pb_c *= math.sqrt(parent.visit_count) / (child.visit_count + 1)
+    pb_c *= np.sqrt(parent.visit_count) / (child.visit_count + 1)
 
     prior_score = pb_c * child.prior
     value_score = child.value()
@@ -167,6 +194,13 @@ def evaluate(node: Node, game: Game, network: Network) -> float:
     """
     Evaluate the given node in the Monte Carlo Tree Search using the neural network.
 
+    This function uses the neural network to infer the value and policy logits for the current game state. 
+    The value is returned as the result of the function.
+
+    The policy logits are converted into probabilities using the softmax function, and these probabilities are 
+    used to initialize the children of the node for each legal action in the game. The probabilities are normalized 
+    so that they sum to 1.
+
     Args:
         node (Node): The node to be evaluated.
         game (Game): The current state of the game.
@@ -177,7 +211,7 @@ def evaluate(node: Node, game: Game, network: Network) -> float:
     """
     value, policy_logits = network.inference(game.make_image(-1))
     node.to_play = game.to_play()
-    policy = {a: math.exp(policy_logits[a]) for a in game.legal_actions()}
+    policy = {a: np.exp(policy_logits[a]) for a in game.legal_actions()}
     policy_sum = sum(policy.values())
     for action, p in policy.items():
         node.children[action] = Node(p / policy_sum)
@@ -209,6 +243,12 @@ def backpropagate(search_path: List[Node], value: float, to_play):
 def add_exploration_noise(config: AlphaZeroConfig, node: Node):
     """
     Adds Dirichlet noise to the prior of the root to encourage exploration.
+    
+    This function adds exploration noise to the prior probabilities of the actions of the root node. 
+    This is done by first generating Dirichlet noise with the given alpha parameter and the number of actions. 
+    The noise is then added to the prior probabilities of the actions, with the amount of noise determined by 
+    the root exploration fraction. The prior probability of each action is updated to be a weighted sum of 
+    its original value and the generated noise.
 
     Args:
       - config (AlphaZeroConfig): Configuration settings for AlphaZero.

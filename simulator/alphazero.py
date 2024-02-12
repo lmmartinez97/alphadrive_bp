@@ -20,7 +20,8 @@ def alphazero() -> Network:
 
     The configuration dictionary includes parameters such as:
     - num_actors: The number of actors for the self-play process.
-    - num_sampling_moves: The number of moves to sample in the self-play process.
+    - num_sampling_moves: The number of moves up to which actions are decided probabilisticly 
+                          -instead of greedily- in the self-play process.
     - max_moves: The maximum number of moves in a game.
     - num_simulations: The number of Monte Carlo Tree Search simulations to run for each move.
     - root_dirichlet_alpha and root_exploration_fraction: Parameters for exploration during MCTS.
