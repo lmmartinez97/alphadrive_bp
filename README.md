@@ -1,6 +1,8 @@
 # Introduction
 
-This repository contains the code associated to the PhD thesis _Behavior Planning in Autonomous Driving: Application of Deep Reinforcement Learning Techniques in Critical Maneuvers.
+This repository contains the code associated to the Behavior Plannign branch of the AlphaDrive project. 
+
+The bulk of this project is being developed under a PhD thesis by Luis Miguel Martinez: _Behavior Planning in Autonomous Driving: Application of Deep Reinforcement Learning Techniques in Critical Maneuvers_.
 
 ## Folder structure
 
