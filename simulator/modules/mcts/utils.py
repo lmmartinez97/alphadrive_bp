@@ -8,7 +8,7 @@ import datetime
 
 from helpers import AlphaZeroConfig, SharedStorage, ReplayBuffer
 from network import Network
-from typing import str, Lsit, Tuple
+from typing import str, List, Tuple
 #####################
 # MCTS functions   #
 #####################
