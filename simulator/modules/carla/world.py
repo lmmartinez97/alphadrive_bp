@@ -14,6 +14,7 @@ import sys
 
 from rich import print
 from numpy import random
+from random import choice as random_choice
 
 # ==============================================================================
 # -- Find CARLA module ---------------------------------------------------------
@@ -101,6 +102,7 @@ class World(object):
         self.blueprint_toyota_prius = None
         
         self.npcs = []
+        self.npc_vehicles_num = 15
 
         self.dataframe_record = {}
 
@@ -111,7 +113,7 @@ class World(object):
         
         self.destination = carla.Location(
             x=self.spawn_point_ego.location.x + self.distance,
-            y=self.spawn_point_ego.location.y - 2, #straight in map is not completely straight
+            y=self.spawn_point_ego.location.y - 1, #straight in map is not completely straight
             z=self.spawn_point_ego.location.z,
         ) #Destination for ego vehicle
 
@@ -155,27 +157,28 @@ class World(object):
         """Spawn NPC vehicles"""
         self.npcs.clear()
         blueprint_library = self.world.get_blueprint_library()
-        blueprint = random.choice(blueprint_library.filter("vehicle.*.*"))
         
         # Initialize a list to store the positions of spawned vehicles
         pos_list = [[self.spawn_point_ego.location.x, self.spawn_point_ego.location.y]]
         # Define the spawn boundaries and minimum distance between vehicles
         x_min, x_max = -950, -750
-        y_choices = [-65, -61]
-        min_distance = 15
+        y_choices = [-65, -69]
+        min_distance = 10
+        num_x = int(np.abs(x_max - x_min)/min_distance)
+        x_choices = np.linspace(x_min, x_max, num_x, dtype=np.float32).tolist()
+        if len(x_choices)*len(y_choices) < number_of_vehicles:
+            raise ValueError("Not enough space to spawn vehicles")
+        
+        spawn_choices = [(x, y) for x in x_choices for y in y_choices]     
+        if pos_list[0] in spawn_choices:
+            spawn_choices.remove(pos_list[0]) 
 
         for _ in range(number_of_vehicles):
-            x_spawn = np.random.randint(x_min, x_max)
-            y_spawn = np.random.choice(y_choices)
-            # If there are already vehicles spawned, ensure the new vehicle is not too close to others
-            if pos_list:
-                while min([np.linalg.norm(np.array([x_spawn, y_spawn]) - np.array(pos)) for pos in pos_list]) < min_distance:
-                    # If the vehicle is too close to others, generate a new spawn position
-                    x_spawn = np.random.randint(x_min, x_max)
-                    y_spawn = np.random.choice(y_choices)
-            pos_list.append([x_spawn, y_spawn])
-            loc = carla.Location(x=float(x_spawn), y=float(y_spawn), z=0.5)
-
+            blueprint = random.choice(blueprint_library.filter("vehicle.*.*"))
+            spawn_point = random_choice(spawn_choices)
+            pos_list.append(spawn_point)
+            loc = carla.Location(x=spawn_point[0], y=spawn_point[1], z=0.5)
+            spawn_choices.remove(spawn_point)
             spawn_point = carla.Transform(
                 loc,
                 carla.Rotation(yaw=0, pitch=0, roll=0),
@@ -185,11 +188,9 @@ class World(object):
             self.actor_list.append(vehicle)
             self.npcs.append(vehicle)
         print("Spawned NPC vehicles")
-        print(pos_list)
         
     def setup_sensors(self):
         """Set up sensors"""
-        print(self.player)
         self.collision_sensor = CollisionSensor(self.player, self.hud)
 
         self.lane_invasion_sensor = LaneInvasionSensor(self.player, self.hud)
@@ -235,7 +236,7 @@ class World(object):
         )
         self.dataframe_record.clear()
         self.spawn_ego_vehicle()
-        self.spawn_npc_vehicles(5)
+        self.spawn_npc_vehicles(self.npc_vehicles_num)
         self.setup_sensors()
         print("Sensors set up")
         if args.static_camera:

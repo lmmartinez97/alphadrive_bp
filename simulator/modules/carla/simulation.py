@@ -150,9 +150,9 @@ class Simulation:
         #hand over control of npcs to traffic manager
         self.traffic_manager.set_synchronous_mode(True)
         for vehicle in self.world.npcs:
-            self.traffic_manager.auto_lane_change(vehicle, False)
+            self.traffic_manager.auto_lane_change(vehicle, True)
             self.traffic_manager.vehicle_percentage_speed_difference(vehicle, np.random.randint(-20, 20))
-            self.traffic_manager.distance_to_leading_vehicle(vehicle, 1)
+            self.traffic_manager.distance_to_leading_vehicle(vehicle, 5)
             self.traffic_manager.collision_detection(vehicle, self.world.player, False)
             self.traffic_manager.ignore_lights_percentage(vehicle, 0)
             vehicle.set_autopilot(True)
@@ -184,10 +184,10 @@ class Simulation:
     
     def game_step(self, verbose = False, action = None, recording = False):
         self.clock.tick()
-        timestamp = self.world.world.get_snapshot().timestamp
-
         self.world.world.tick()
         self.world.tick(self.clock, self.episode_counter, self.frame_counter)
+
+        timestamp = self.world.world.get_snapshot().timestamp
 
         if self.display:
             self.world.render(self.display)
@@ -212,6 +212,9 @@ class Simulation:
         self.world.player.apply_control(control)
         #await send_log_data(log_host, log_port, frame_df)
         prev_timestamp = timestamp
+        for waypoint, road_option in list(self.agent._local_planner.get_plan())[:10]:
+            print("Waypoint: ", waypoint.transform.location, "Road option: ", road_option)
+        input("Press Enter to continue")
 
         if verbose:
             print("State: ", state)

@@ -193,25 +193,26 @@ class HUD(object):
         #   '',
         #   'Number of vehicles: % 8d' % len(vehicles)]
 
-        if len(vehicles) > 1:
-            self._info_text += ["Nearby vehicles:"]
+        # if len(vehicles) > 1:
+        #     self._info_text += ["Nearby vehicles:"]
 
-        def dist(l):
-            return np.sqrt(
-                (l.x - transform.location.x) ** 2
-                + (l.y - transform.location.y) ** 2
-                + (l.z - transform.location.z) ** 2
-            )
+        # def dist(l):
+        #     return np.sqrt(
+        #         (l.x - transform.location.x) ** 2
+        #         + (l.y - transform.location.y) ** 2
+        #         + (l.z - transform.location.z) ** 2
+        #     )
 
-        vehicles = [
-            (dist(x.get_location()), x) for x in vehicles if x.id != world.player.id
-        ]
+        # vehicles = [
+        #     (dist(x.get_location()), x) for x in vehicles if x.id != world.player.id
+        # ]
 
-        for dist, vehicle in sorted(vehicles):
-            if dist > 200.0:
-                break
-            vehicle_type = get_actor_display_name(vehicle, truncate=22)
-            self._info_text.append("% 4dm %s" % (dist, vehicle_type))
+        # for dist, vehicle in sorted(vehicles):
+        #     print(type(vehicle), type(dist), vehicle, dist)
+        #     if dist > 200.0:
+        #         break
+        #     vehicle_type = get_actor_display_name(vehicle, truncate=22)
+        #     self._info_text.append("% 4dm %s" % (dist, vehicle_type))
 
     def toggle_info(self):
         """Toggle info on or off"""

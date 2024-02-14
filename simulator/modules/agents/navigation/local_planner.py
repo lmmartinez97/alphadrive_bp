@@ -78,7 +78,7 @@ class LocalPlanner(object):
         self._dt = 1.0 / 20.0
         self._target_speed = 20.0  # Km/h
         self._sampling_radius = 2.0
-        self._args_lateral_dict = {'K_P': 1.95, 'K_I': 0.05, 'K_D': 0.2, 'dt': self._dt}
+        self._args_lateral_dict = {'K_P': 1.95, 'K_I': 0.08, 'K_D': 0, 'dt': self._dt}
         self._args_longitudinal_dict = {'K_P': 1.0, 'K_I': 0.05, 'K_D': 0, 'dt': self._dt}
         self._max_throt = 0.75
         self._max_brake = 0.3
@@ -168,7 +168,6 @@ class LocalPlanner(object):
         # check we do not overflow the queue
         available_entries = self._waypoints_queue.maxlen - len(self._waypoints_queue)
         k = min(available_entries, k)
-
         for _ in range(k):
             last_waypoint = self._waypoints_queue[-1][0]
             next_waypoints = list(last_waypoint.next(self._sampling_radius))

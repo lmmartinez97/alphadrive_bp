@@ -20,7 +20,7 @@ from tensorflow.keras.layers import RandomFlip, RandomRotation
 from tensorflow.keras.layers import Dropout, BatchNormalization, Flatten, Input, SpatialDropout2D
 
 class AutoEncoder:
-    def __init__(self, train_config = None, model_config = None, encoder_config = None, decoder_config = None):
+    def __init__(self, train_config=None, model_config=None, encoder_config=None, decoder_config=None):
         """
         Initialize an AutoEncoder instance.
 
@@ -30,6 +30,7 @@ class AutoEncoder:
             encoder_config (dict): Configuration for the encoder part of the autoencoder.
             decoder_config (dict): Configuration for the decoder part of the autoencoder.
         """
+        # Initialize instance variables
         self.train_config = train_config
         self.encoder_config = encoder_config
         self.decoder_config = decoder_config
@@ -38,6 +39,8 @@ class AutoEncoder:
         self.encoder = None
         self.decoder = None
         self.model = None
+
+        # Mapping of layer names to layer classes
         self.layer_mapping = {
             'Input': None,
             'RandomFlip': RandomFlip,
@@ -55,8 +58,10 @@ class AutoEncoder:
             'BatchNormalization': BatchNormalization,
             'Rescaling': Rescaling
         }
-        
+
+        # Min and max scalers for normalization
         self.min_scaler, self.max_scaler = [1.3206229756843115e-106, 117.8761944159839]
+
         
     def buildModel(self, arch_config = None):
         """
@@ -68,11 +73,13 @@ class AutoEncoder:
         Returns:
             tf.keras.models.Sequential: The constructed Keras model.
         """
+        # Create a Sequential model and add layers based on the provided configuration
         model = Sequential()
         for layer in arch_config.keys():
             layer_identifier = re.split('_', layer)[0]
             arch_config[layer]['name'] = layer
             
+            # Get layer class based on the layer identifier
             layer_class = self.layer_mapping.get(layer_identifier)
             if layer_class:
                 x = layer_class(**arch_config[layer])
@@ -83,19 +90,24 @@ class AutoEncoder:
         """
         Build the autoencoder model using the encoder and decoder configurations.
         """
+        # Build encoder and decoder models separately
         self.encoder = self.buildModel(arch_config=self.encoder_config)
         self.decoder = self.buildModel(arch_config=self.decoder_config)
 
+        # Define input and output tensors for the full autoencoder model
         input_tensor = Input(shape=self.encoder_config['Input_1']['shape'])
         latent_vector = self.encoder(input_tensor)
         output = self.decoder(latent_vector)
+        # Combine encoder and decoder into a single model
         self.model = Model(input_tensor, output)
+        # Compile the autoencoder model
         self.compileModel()
         
     def compileModel(self):
         """
         Compile the autoencoder model with the specified loss function and optimizer.
         """
+        # Extract configuration parameters for compilation
         loss_fun = self.model_config['loss']
         opt = self.model_config['opt']
         name = self.model_config['name']
@@ -103,6 +115,7 @@ class AutoEncoder:
         initial_learning_rate = self.model_config['initial_learning_rate']
         decay_rate = self.model_config['decay_rate']
 
+        # Define a learning rate schedule for optimization
         lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
             initial_learning_rate,
             decay_steps=100000,
@@ -110,6 +123,7 @@ class AutoEncoder:
             staircase=True
         )
 
+        # Initialize optimizer based on the specified type
         if opt == 'Adam':
             opt = tf.keras.optimizers.legacy.Adam(learning_rate=lr_schedule)
         elif opt == 'SGD':
@@ -117,25 +131,12 @@ class AutoEncoder:
         elif opt == 'Aadamax':
             opt = tf.keras.optimizers.legacy.Adamax(learning_rate=lr_schedule)
 
-        print("Loss, optimizer and metric set up")
+        # Compile the model with configured parameters
         self.model._name = name
-        self.model.compile(loss = loss_fun, optimizer = opt, metrics = metrics)
-        print("Model created:")
-        self.model.summary()
-        print("Model has been built")
+        self.model.compile(loss=loss_fun, optimizer=opt, metrics=metrics)
 
     def trainModel(self, train_data, val_data, log_dir):
-        """
-        Train the autoencoder model using the provided training data.
-
-        Args:
-            train_data (numpy.ndarray): Training data.
-            val_data (numpy.ndarray): Validation data.
-            log_dir (str): Directory for TensorBoard logs.
-
-        Returns:
-            dict: Training history.
-        """
+         # Extract training configuration parameters
         batch_size = self.train_config['batch_size']
         epochs = self.train_config['epochs']
         shuffle = self.train_config['shuffle']
@@ -144,19 +145,22 @@ class AutoEncoder:
         verbose = self.train_config['verbose']
         start_from = self.train_config['start_from_epoch']
         
+        # Configure callbacks for training
         checkpoint_path = os.path.join(log_dir, "model_checkpoint.h5")
         checkpoint = tf.keras.callbacks.ModelCheckpoint(checkpoint_path, save_best_only=True)
 
         early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss",
-        patience=patience,
-        verbose=1,
-        min_delta = min_delta,
-        start_from_epoch = start_from,
-        restore_best_weights = True)
+            monitor="val_loss",
+            patience=patience,
+            verbose=1,
+            min_delta=min_delta,
+            start_from_epoch=start_from,
+            restore_best_weights=True
+        )
 
         tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, update_freq=4)
 
+        # Train the model
         history = self.model.fit(
             x=train_data,
             y=train_data,
@@ -169,6 +173,7 @@ class AutoEncoder:
             steps_per_epoch=None,
             validation_freq=1,
         )
+        # Store training history
         self.history = history.history
 
         return self.history
@@ -196,6 +201,7 @@ class AutoEncoder:
         Returns:
             numpy.ndarray: Latent vectors.
         """
+        # Normalize input data before encoding
         data = data * (self.max_scaler - self.min_scaler) + self.min_scaler
         latent_vectors = self.encoder.predict(data, verbose = 0)
         return latent_vectors
@@ -272,6 +278,7 @@ class AutoEncoder:
                 return True
             except (TypeError, OverflowError):
                 return False
+
         # Create the directory if it doesn't exist
         if not os.path.exists(directory):
             print(f"Directory {directory} does not exist. Creating...")
@@ -297,10 +304,10 @@ class AutoEncoder:
             "history": self.history if self.history else None
         }
 
-        #Convert everything to string so that its json serializable
+        # Convert non-serializable data to strings
         for outer_key, outer_value in all_data.items():
             for inner_key, inner_value in outer_value.items():
-                if not (is_jsonable(inner_value)):
+                if not is_jsonable(inner_value):
                     all_data[outer_key][inner_key] = str(inner_value)
 
         # Save the combined dictionary as a JSON file

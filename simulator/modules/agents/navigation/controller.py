@@ -9,7 +9,7 @@ from collections import deque
 import math
 import numpy as np
 import carla
-from ..tools.misc import get_speed
+from ..tools.misc import get_speed, angle_between_vectors, normalize_angle
 
 
 class VehiclePIDController():
@@ -61,7 +61,6 @@ class VehiclePIDController():
             :param waypoint: target location encoded as a waypoint
             :return: distance (in meters) to the waypoint
         """
-
         acceleration = self._lon_controller.run_step(target_speed)
         current_steering = self._lat_controller.run_step(waypoint)
         control = carla.VehicleControl()
@@ -88,7 +87,6 @@ class VehiclePIDController():
         control.hand_brake = False
         control.manual_gear_shift = False
         self.past_steering = steering
-
         return control
 
 
@@ -247,6 +245,9 @@ class PIDLateralController():
         _cross = np.cross(v_vec, w_vec)
         if _cross[2] < 0:
             _dot *= -1.0
+
+        _dot = normalize_angle(_dot)
+        print("Current error angle is: ", _dot)
 
         self._e_buffer.append(_dot)
         if len(self._e_buffer) >= 2:

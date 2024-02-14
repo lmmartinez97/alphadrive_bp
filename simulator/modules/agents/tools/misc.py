@@ -169,3 +169,42 @@ def positive(num):
         :param num: value to check
     """
     return num if num > 0.0 else 0.0
+
+def normalize_angle(angle: float) -> float:
+    """
+    Normalize an angle to the range [-pi, pi].
+
+    Args:
+        angle (float): The angle to normalize, in radians.
+
+    Returns:
+        float: The normalized angle, in radians.
+    """
+    normalized_angle = angle % (2 * np.pi)
+    if normalized_angle > np.pi:
+        normalized_angle -= 2 * np.pi
+    return normalized_angle
+
+def angle_between_vectors(v1: np.array, v2: np.array) -> float:
+    """
+    Calculate the angle between two vectors.
+
+    Args:
+        v1 (np.array): The first vector.
+        v2 (np.array): The second vector.
+
+    Returns:
+        float: The angle between the two vectors in radians.
+    """
+    # Calculate the dot product of the two vectors
+    dot_product = np.dot(v1, v2)
+
+    # Calculate the lengths (norms) of the two vectors
+    norm_v1 = np.linalg.norm(v1)
+    norm_v2 = np.linalg.norm(v2)
+
+    # Calculate the cosine of the angle between the vectors
+    cos_angle = dot_product / (norm_v1 * norm_v2)
+
+    # Use arccos to find the angle itself, and return it
+    return np.arccos(np.clip(cos_angle, -1.0, 1.0))
