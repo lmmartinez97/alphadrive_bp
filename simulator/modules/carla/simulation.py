@@ -159,9 +159,11 @@ class Simulation:
             
 
         # Set the agent destination
-        route = self.agent.set_destination(
+        self.route = self.agent.set_destination(
             end_location=self.world.destination, start_location=self.world.spawn_point_ego.location
         )
+        self.reference = []
+        print(type(self.route))
 
         print("Spawn point is: ", self.world.spawn_point_ego.location)
         print("Destination is: ", self.world.destination)
