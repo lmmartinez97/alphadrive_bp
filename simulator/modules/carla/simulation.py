@@ -55,14 +55,10 @@ from .printers import print_blue, print_green, print_highlight, print_red
 from .world import World
 from .hud import HUD
 from .potential_field import PotentialField
+from .pid import CarController
 
-from ..agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
-from ..agents.navigation.behavior_agent import (
-    BehaviorAgent,
-)  # pylint: disable=import-error
-from ..agents.navigation.constant_velocity_agent import (
-    ConstantVelocityAgent,
-)  # pylint: disable=import-error
+from ..agents.navigation.global_route_planner import GlobalRoutePlanner
+from ..agents.navigation.behavior_types import Cautious, Normal, Aggressive
 
 from .autoencoder import load_model
 
@@ -91,19 +87,12 @@ class Simulation:
             2: -4 #introduce a one lane offset to the left
         }
 
-        #load autoencoder
-        self.autoencoder = load_model(model_name= "autoencoder_1" ,directory="../scene_representation/training/saved_models")
+
         #init pygame
         pygame.init()
         pygame.font.init()
-
-        #potential field instance
-        rx = 50 # horizontal semiaxis of ellipse to consider as ROI
-        ry = 6 # vertical semiaxis of ellipse to consider as ROI
-        sx = 0.5
-        sy = 0.1
-        self.potential_field = PotentialField(radius_x = rx, radius_y = ry, step_x = sx, step_y = sy)
-
+        
+        self.agents_dict = {"cautious": Cautious, "normal": Normal, "aggressive": Aggressive}
         #include static camera
         if self.args.static_camera:
             self.args.width *= 2
@@ -126,27 +115,43 @@ class Simulation:
         print("Created hud")
         self.world = World(self.sim_world, self.hud, self.args)
         print("Created world instance")
-
+        
+        #load autoencoder
+        self.autoencoder = load_model(model_name= "autoencoder_1" ,directory="../scene_representation/training/saved_models")
+        #Initialize GlobalRoutePlanner
+        self.grp = GlobalRoutePlanner(wmap=self.world.map, sampling_resolution=2) # Sampling resolution of 2 meters
+        #Initialize Potential Field
+        rx = 50 # horizontal semiaxis of ellipse to consider as ROI
+        ry = 6 # vertical semiaxis of ellipse to consider as ROI
+        sx = 0.5
+        sy = 0.1
+        self.potential_field = PotentialField(radius_x = rx, radius_y = ry, step_x = sx, step_y = sy)
+        
+        #Configure PID controllers
+        self.longitudinal_params = {
+            'Kp': 1.0,
+            'Ki': 0.1,
+            'Kd': 0.5,
+            'dt': self.world.delta_seconds,
+            'max_throttle': 0.75,
+            'max_brake': 0.3
+        }
+        self.lateral_params = {
+            'Kp': 1.0,
+            'Ki': 0.1,
+            'Kd': 0.5,
+            'dt': self.world.delta_seconds,
+            'max_steering': 1.0
+        }
+            
         self.controller = KeyboardControl(self.world)
         self.clock = pygame.time.Clock()
 
     def init_game(self):
         """Method for initializing a new episode"""
         self.world.restart(self.args)
-        # initialize agent
-        self.agent = None
-        if self.args.agent == "Basic":
-            self.agent = BasicAgent(self.world.player, 30)
-            self.agent.follow_speed_limits(True)
-        elif self.args.agent == "Constant":
-            self.agent = ConstantVelocityAgent(self.world.player, 30)
-            ground_loc = self.world.world.ground_projection(self.world.player.get_location(), 5)
-            if ground_loc:
-                self.world.player.set_location(ground_loc.location + carla.Location(z=0.01))
-            self.agent.follow_speed_limits(True)
-        elif self.args.agent == "Behavior":
-            self.agent = BehaviorAgent(self.world.player, behavior=self.args.behavior)
-            
+    
+        self.agent_type = self.agents_dict[self.args.behavior]
         #hand over control of npcs to traffic manager
         self.traffic_manager.set_synchronous_mode(True)
         for vehicle in self.world.npcs:
@@ -157,13 +162,11 @@ class Simulation:
             self.traffic_manager.ignore_lights_percentage(vehicle, 0)
             vehicle.set_autopilot(True)
             
-
         # Set the agent destination
-        self.route = self.agent.set_destination(
-            end_location=self.world.destination, start_location=self.world.spawn_point_ego.location
-        )
-        self.reference = []
-        print(type(self.route))
+        self.route = self.grp.trace_route(self.world.spawn_waypoint, self.world.dest_waypoint)
+        self.reference = [[self.agent_type.max_speed, waypoint.transform.location] for waypoint, _ in self.route]
+        
+        self.pid = CarController(longitudinal_params=self.longitudinal_params, lateral_params=self.lateral_params, reference=self.reference)
 
         print("Spawn point is: ", self.world.spawn_point_ego.location)
         print("Destination is: ", self.world.destination)
@@ -176,7 +179,7 @@ class Simulation:
         input("Press Enter to start episode")
         self.prev_timestamp = self.world.world.get_snapshot().timestamp
 
-        for waypoint, _ in route:
+        for waypoint, _ in self.route:
             self.world.world.debug.draw_point(
                 waypoint.transform.location,
                 size=0.1,
@@ -199,24 +202,25 @@ class Simulation:
             return -1, -1, prev_timestamp
         
         if self.frame_counter % self.decision_period == 0 and action is not None:
-            self.agent._local_planner._vehicle_controller.set_offset(self.available_actions[action])
+            self.pid.lateral_controller.set_offset(self.available_actions[action])
             self.decision_period += 1
         else:
-            self.agent._local_planner._vehicle_controller.set_offset(0)
+            self.pid.lateral_controller.set_offset(0)
 
         self.world.record_frame_state(frame_number=self.frame_counter)
         self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
         pf = self.potential_field.calculate_field()
         state = self.autoencoder.encode(pf).flatten()
         
-        control = self.agent.run_step()
+        velocity = self.world.player.get_velocity()
+        speed = 3.6 * np.sqrt(velocity.x**2 + velocity.y**2)
+        transform = self.world.player.get_transform()
+        control = self.pid.run_step(current_speed=speed, current_transform=transform)
         control.manual_gear_shift = False
         self.world.player.apply_control(control)
+        
         #await send_log_data(log_host, log_port, frame_df)
         prev_timestamp = timestamp
-        for waypoint, road_option in list(self.agent._local_planner.get_plan())[:10]:
-            print("Waypoint: ", waypoint.transform.location, "Road option: ", road_option)
-        input("Press Enter to continue")
 
         if verbose:
             print("State: ", state)
@@ -233,7 +237,7 @@ class Simulation:
         """Method for running the simulation"""
         self.init_game()
         while self.episode_counter < self.episode_limit:
-            while (self.frame_counter < self.frame_limit) and not self.agent.done():
+            while (self.frame_counter < self.frame_limit) and not self.pid.done:
                 if self.frame_counter % 100 == 0:
                     verbose = False
                 self.game_step(verbose=verbose)

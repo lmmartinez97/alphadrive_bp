@@ -42,18 +42,8 @@ from carla import ColorConverter as cc
 
 from .camera import CameraManager, StaticCamera
 from .hud import HUD, get_actor_display_name
-from .keyboard_control import KeyboardControl
 from .printers import print_blue, print_green, print_highlight, print_red
 from .sensors import CollisionSensor, GnssSensor, LaneInvasionSensor
-from .utils import get_straight_angle
-
-from ..agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
-from ..agents.navigation.behavior_agent import (
-    BehaviorAgent,
-)  # pylint: disable=import-error
-from ..agents.navigation.constant_velocity_agent import (
-    ConstantVelocityAgent,
-)  # pylint: disable=import-error
 
 def find_weather_presets():
     """Method to find weather presets"""
@@ -72,7 +62,7 @@ class World(object):
         """Constructor method"""
         self._args = args
         self.world = carla_world
-        self.delta_simulated = 0.1
+        self.delta_seconds = 0.1
 
         try:
             self.map = self.world.get_map()
@@ -87,45 +77,45 @@ class World(object):
         self.hud = hud
         self.actor_list = []
         self.sensor_list = []
-        self.player = None
-        self.collision_sensor = None
-        self.lane_invasion_sensor = None
-        self.gnss_sensor = None
-        self.camera_manager = None
-        self.static_camera = None
         self._weather_presets = find_weather_presets()
         self._weather_index = 0
         self._actor_filter = args.filter
         self.world.on_tick(hud.on_world_tick)
         self.recording_enabled = False
         self.recording_start = 0
-        self.blueprint_toyota_prius = None
         
+        # Non playable vehicles
         self.npcs = []
         self.npc_vehicles_num = 15
 
+        # Dataframe to store the state of all vehicles in the world
         self.dataframe_record = {}
-
+        
+        # Set up spawn point and destination for ego vehicle
         self.distance = 300
         self.spawn_point_ego = carla.Transform(
             carla.Location(x=-850, y=-65, z=0.5), carla.Rotation(yaw=0, pitch=0, roll=0)
         ) #Spwan point for ego vehicle
-        
         self.destination = carla.Location(
             x=self.spawn_point_ego.location.x + self.distance,
             y=self.spawn_point_ego.location.y - 1, #straight in map is not completely straight
             z=self.spawn_point_ego.location.z,
         ) #Destination for ego vehicle
-
+        #Waypoints for route tracing
+        self.spawn_waypoint = self.map.get_waypoint(self.spawn_point_ego.location, project_to_road=True)
+        self.dest_waypoint = self.map.get_waypoint(self.destination, project_to_road=True)
+        
+        # Flag to determine if static camera should be rendered
         self.static_camera_flag = 0
 
+        #Configure world settings
         settings = self.world.get_settings()
         settings.synchronous_mode = True
-        settings.fixed_delta_seconds = self.delta_simulated
+        settings.fixed_delta_seconds = self.delta_seconds
         settings.no_rendering_mode = True
         settings.substepping = True
         settings.max_substep_delta_time = 0.01
-        settings.max_substeps = int(self.delta_simulated * 50)
+        settings.max_substeps = int(self.delta_seconds * 50)
         self.world.apply_settings(settings)
         #self.restart(args)
 
@@ -227,16 +217,16 @@ class World(object):
     def restart(self, args):
         """Restart the world"""
         
-        # Keep same camera config if the camera manager exists.
-        cam_index = self.camera_manager.index if self.camera_manager is not None else 0
-        cam_pos_id = (
-            self.camera_manager.transform_index
-            if self.camera_manager is not None
-            else 0
-        )
+        # # Keep same camera config if the camera manager exists.
+        # cam_index = self.camera_manager.index if self.camera_manager is not None else 0
+        # cam_pos_id = (
+        #     self.camera_manager.transform_index
+        #     if self.camera_manager is not None
+        #     else 0
+        # )
         self.dataframe_record.clear()
         self.spawn_ego_vehicle()
-        self.spawn_npc_vehicles(self.npc_vehicles_num)
+        #self.spawn_npc_vehicles(self.npc_vehicles_num)
         self.setup_sensors()
         print("Sensors set up")
         if args.static_camera:

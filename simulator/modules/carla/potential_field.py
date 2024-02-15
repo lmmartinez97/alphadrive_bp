@@ -41,7 +41,10 @@ class PotentialField:
         self.num_y = int(2*self.ry / self.sy) + 1
         self.grid = np.zeros([self.num_y, self.num_x], dtype = np.float32) #x dimension is rows, y dimension is columns
         self.x_pos, self.y_pos = np.linspace(-self.rx, self.rx, self.num_x), np.linspace(-self.ry, self.ry, self.num_y) #x and y interchanged so x is the horizontal dimension, and y is the vertical dimension
-    
+        print("Created PotentialField instance with paramaters:")
+        print(f"rx: {self.rx}, ry: {self.ry}, sx: {self.sx}, sy: {self.sy}")
+        print(f"num_x: {self.num_x}, num_y: {self.num_y}")
+        
     def update(self, dataframe):
         """
         Update the dataframe used to calculate the potential field.

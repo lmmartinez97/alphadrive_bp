@@ -37,17 +37,21 @@ class GlobalRoutePlanner(object):
         self._build_graph()
         self._find_loose_ends()
         self._lane_change_link()
+        
+        print("Created GlobalRoutePlanner in map: ", self._wmap.name, " with sampling resolution: ", self._sampling_resolution)
 
-    def trace_route(self, origin, destination):
+    def trace_route(self, current_waypoint, destination_waypoint):
         """
         This method returns list of (carla.Waypoint, RoadOption)
         from origin to destination
         """
-        route_trace = []
-        route = self._path_search(origin, destination)
-        current_waypoint = self._wmap.get_waypoint(origin)
-        destination_waypoint = self._wmap.get_waypoint(destination)
 
+        if isinstance(current_waypoint, carla.Location):
+            current_waypoint = self._wmap.get_waypoint(current_waypoint, project_to_road=True)
+        if isinstance(destination_waypoint, carla.Location):
+            destination_waypoint = self._wmap.get_waypoint(destination_waypoint, project_to_road=True)
+        route_trace = []
+        route = self._path_search(origin=current_waypoint.transform.location, destination=destination_waypoint.transform.location)
         for i in range(len(route) - 1):
             road_option = self._turn_decision(i, route)
             edge = self._graph.edges[route[i], route[i+1]]
@@ -72,7 +76,7 @@ class GlobalRoutePlanner(object):
                 for waypoint in path[closest_index:]:
                     current_waypoint = waypoint
                     route_trace.append((current_waypoint, road_option))
-                    if len(route)-i <= 2 and waypoint.transform.location.distance(destination) < 2*self._sampling_resolution:
+                    if len(route)-i <= 2 and waypoint.transform.location.distance(destination_waypoint.transform.location) < 2*self._sampling_resolution:
                         break
                     elif len(route)-i <= 2 and current_waypoint.road_id == destination_waypoint.road_id and current_waypoint.section_id == destination_waypoint.section_id and current_waypoint.lane_id == destination_waypoint.lane_id:
                         destination_index = self._find_closest_in_list(destination_waypoint, path)
