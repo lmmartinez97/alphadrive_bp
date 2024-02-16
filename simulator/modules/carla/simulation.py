@@ -6,6 +6,7 @@ from __future__ import print_function
 # ==============================================================================
 
 import glob
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
@@ -70,6 +71,7 @@ class Simulation:
                   Add support for mcts
         """
         # simulation variables
+        print()
         self.episode_counter = 0
         self.frame_counter = 0
         self.args = args
@@ -87,6 +89,18 @@ class Simulation:
             2: -4 #introduce a one lane offset to the left
         }
 
+        #record variables for plotting
+        self.yaw = []
+        self.throttle_brake = []
+        self.steer = []
+        self.speed = []
+        self.position = []
+        self.vel_target = []
+        self.pos_target = []
+        self.yaw_target = []
+        self.lat_error = []
+        self.lon_error = []
+        self.time = []
 
         #init pygame
         pygame.init()
@@ -100,7 +114,7 @@ class Simulation:
         self.display = pygame.display.set_mode(
             (self.args.width, self.args.height), pygame.HWSURFACE | pygame.DOUBLEBUF
         )
-        print("Created display")
+        print_green("Created display")
 
         # init client and apply settings
         self.client = carla.Client(self.args.host, self.args.port)
@@ -112,9 +126,9 @@ class Simulation:
 
         # initialize hud and world
         self.hud = HUD(self.args.width, self.args.height, text=__doc__)
-        print("Created hud")
+        print_green("Created hud")
         self.world = World(self.sim_world, self.hud, self.args)
-        print("Created world instance")
+        print_green("Created world instance")
         
         #load autoencoder
         self.autoencoder = load_model(model_name= "autoencoder_1" ,directory="../scene_representation/training/saved_models")
@@ -129,21 +143,26 @@ class Simulation:
         
         #Configure PID controllers
         self.longitudinal_params = {
-            'Kp': 1.0,
-            'Ki': 0.1,
-            'Kd': 0.5,
+            'Kp': 0.75,
+            'Ki': 0.25,
+            'Kd': 0.05,
             'dt': self.world.delta_seconds,
             'max_throttle': 0.75,
-            'max_brake': 0.3
+            'max_brake': 0.5,
+            'max_throttle_increment': 0.05,
+            'max_brake_increment': 0.03,
+            'max_integral_threshold': 0.5,
         }
         self.lateral_params = {
-            'Kp': 1.0,
-            'Ki': 0.1,
-            'Kd': 0.5,
+            'Kp': 0.9,
+            'Ki': 0.03,
+            'Kd': 0,
             'dt': self.world.delta_seconds,
-            'max_steering': 1.0
+            'max_steering': 1.0,
+            'max_steering_increment': 0.03,
         }
-            
+        self.pid = CarController(longitudinal_params=self.longitudinal_params, lateral_params=self.lateral_params, reference=None)
+
         self.controller = KeyboardControl(self.world)
         self.clock = pygame.time.Clock()
 
@@ -165,19 +184,15 @@ class Simulation:
         # Set the agent destination
         self.route = self.grp.trace_route(self.world.spawn_waypoint, self.world.dest_waypoint)
         self.reference = [[self.agent_type.max_speed, waypoint.transform.location] for waypoint, _ in self.route]
-        
-        self.pid = CarController(longitudinal_params=self.longitudinal_params, lateral_params=self.lateral_params, reference=self.reference)
-
-        print("Spawn point is: ", self.world.spawn_point_ego.location)
-        print("Destination is: ", self.world.destination)
+        self.pid.update_reference(self.reference)
 
         self.world.player.set_transform(self.world.spawn_point_ego)
         self.clock.tick()
         self.world.world.tick()
         self.world.dataframe = pd.DataFrame()
 
-        input("Press Enter to start episode")
         self.prev_timestamp = self.world.world.get_snapshot().timestamp
+        self.first_timestamp = self.prev_timestamp
 
         for waypoint, _ in self.route:
             self.world.world.debug.draw_point(
@@ -186,7 +201,20 @@ class Simulation:
                 color=carla.Color(255, 0, 0),
                 life_time=100,
             )
-    
+
+        # Clear record variables
+        self.yaw.clear()
+        self.throttle_brake.clear()
+        self.steer.clear()
+        self.speed.clear()
+        self.position.clear()
+        self.vel_target.clear()
+        self.pos_target.clear()
+        self.yaw_target.clear()
+        self.lat_error.clear()
+        self.lon_error.clear()
+        self.time.clear()
+
     def game_step(self, verbose = False, action = None, recording = False):
         self.clock.tick()
         self.world.world.tick()
@@ -219,6 +247,19 @@ class Simulation:
         control.manual_gear_shift = False
         self.world.player.apply_control(control)
         
+        #record control signals for plotting
+        self.yaw.append(self.world.player.get_transform().rotation.yaw)
+        self.throttle_brake.append(control.throttle - control.brake)
+        self.steer.append(control.steer)
+        self.speed.append(speed)
+        self.position.append(self.world.player.get_location())
+        self.vel_target.append(self.pid.longitudinal_controller.target_speed)
+        self.pos_target.append(self.pid.lateral_controller.target_location)
+        self.yaw_target.append(self.pid.lateral_controller.target_yaw)
+        self.lon_error.append(self.pid.longitudinal_controller.error)
+        self.lat_error.append(self.pid.lateral_controller.error)
+        self.time.append(timestamp.elapsed_seconds - self.first_timestamp.elapsed_seconds)
+
         #await send_log_data(log_host, log_port, frame_df)
         prev_timestamp = timestamp
 
@@ -232,6 +273,49 @@ class Simulation:
             input("Press Enter to continue")
             
         return state
+    
+    def plot_results(self):
+        """Method for plotting the results of the simulation"""
+        width = 2
+        fig, ax = plt.subplots(2, 2, figsize=(15, 15))
+        ax[0, 0].plot(self.time ,self.yaw_target, label="Target Yaw", linewidth=width)
+        ax[0, 0].plot(self.time,self.lat_error, label="Lateral Error", linewidth=width)
+        ax[0, 0].set_title("Yaw")
+        ax[0, 0].set_xlabel("Time")
+        ax[0, 0].set_ylabel("Yaw")
+        ax[0, 0].legend()
+
+        ax[0, 1].plot(self.time,self.speed, label="Speed", linewidth=width)
+        ax[0, 1].plot(self.time,self.vel_target, label="Target Speed", linewidth=width)
+        ax[0, 1].plot(self.time,self.lon_error, label="Longitudinal Error", linewidth=width)
+        ax[0, 1].set_title("Speed")
+        ax[0, 1].set_xlabel("Time")
+        ax[0, 1].set_ylabel("Speed")
+        ax[0, 1].legend()
+
+        ax[1, 0].plot(self.time,self.steer, label="Steer", linewidth=width)
+        ax[1, 0].plot(self.time, np.gradient(self.steer), label="Steer Derivative", linewidth=2)
+        ax[1, 0].set_title("Steer")
+        ax[1, 0].set_xlabel("Time")
+        ax[1, 0].set_ylabel("Steer")
+        ax[1, 0].legend()
+
+        ax[1, 1].plot(self.time,self.throttle_brake, label="Throttle/Brake", linewidth=width)
+        ax[1, 1].plot(self.time, np.gradient(self.throttle_brake), label="ThrottleBrake Derivative", linewidth=2)
+        ax[1, 1].set_title("Throttle/Brake")
+        ax[1, 1].set_xlabel("Time")
+        ax[1, 1].set_ylabel("Throttle/Brake")
+        ax[1, 1].legend()
+
+        fig, ax = plt.subplots(figsize=(15, 15))
+        ax.plot([pos.x for pos in self.position], [pos.y for pos in self.position], label="Position", linewidth=width)
+        ax.plot([pos.x for pos in self.pos_target], [pos.y for pos in self.pos_target], label="Target Position", linewidth=width)
+        ax.set_title("Position")
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.legend()
+
+        plt.show()
 
     def run(self):
         """Method for running the simulation"""
@@ -242,6 +326,8 @@ class Simulation:
                     verbose = False
                 self.game_step(verbose=verbose)
                 self.frame_counter += 1
+            self.plot_results()
+            input("Press Enter to continue")
             self.frame_counter = 0
             print("Restored frame state")
             print("Finished episode ", self.episode_counter, " initializing next episode")

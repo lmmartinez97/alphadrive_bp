@@ -17,5 +17,5 @@ def print_highlight(*args):
 
 def print_blue(*args):
     for arg in args:
-        cprint(arg, "blue", end=' ')  # Using end=' ' to print all arguments on the same line
+        cprint(arg, "light_blue", end=' ')  # Using end=' ' to print all arguments on the same line
     print()

@@ -25,6 +25,8 @@ import carla
 import numpy as np
 import carla
 
+from .printers import print_blue, print_red
+
 class PIDController:
     """
     Class for a generic PID controller.
@@ -34,10 +36,11 @@ class PIDController:
             Should contain keys 'Kp', 'Ki', 'Kd', and 'dt'.
     """
     def __init__(self, params):
-        self.Kp = params['Kp']
-        self.Ki = params['Ki']
-        self.Kd = params['Kd']
-        self.dt = params['dt']
+        self.Kp = params.get('Kp', 1.0)
+        self.Ki = params.get('Ki', 1.0)
+        self.Kd = params.get('Kd', 1.0)
+        self.dt = params.get('dt', 0.1)
+        self.max_integral_threshold = params.get('max_integral_threshold', None)
         self.prev_error = 0
         self.integral = 0
 
@@ -49,6 +52,8 @@ class PIDController:
             float: The control output.
         """
         self.integral += error * self.dt
+        if self.max_integral_threshold and self.integral > self.max_integral_threshold:
+            self.integral = 0 #reset integral to avoid windup
         derivative = (error - self.prev_error) / self.dt
         output = self.Kp * error + self.Ki * self.integral + self.Kd * derivative
         self.prev_error = error
@@ -64,8 +69,12 @@ class LongitudinalController(PIDController):
     """
     def __init__(self, params):
         super().__init__(params)
-        self.max_throttle = params['max_throttle']
-        self.max_brake = params['max_brake']
+        self.max_throttle = params.get('max_throttle', 0.75)
+        self.max_throttle_increment = params.get('max_throttle_increment', 0.1)
+        self.max_brake = params.get('max_brake', 0.6)
+        self.max_brake_increment = params.get('max_brake_increment', 0.1)
+        self.error = 0
+        self.prev_action = 0
 
     def saturation(self, value):
         """
@@ -77,7 +86,21 @@ class LongitudinalController(PIDController):
         Returns:
             float: The saturated control output.
         """
-        return max(min(value, self.max_throttle), -self.max_brake)
+        saturated_output = max(min(value, self.max_throttle), -self.max_brake)
+
+        if saturated_output > 0:
+            if saturated_output - self.prev_action > self.max_throttle_increment:
+                saturated_output = self.prev_action + self.max_throttle_increment
+            elif saturated_output - self.prev_action < -self.max_throttle_increment:
+                saturated_output = self.prev_action - self.max_throttle_increment
+        else:
+            if saturated_output - self.prev_action > self.max_brake_increment:
+                saturated_output = self.prev_action + self.max_brake_increment
+            elif saturated_output - self.prev_action < -self.max_brake_increment:
+                saturated_output = self.prev_action - self.max_brake_increment
+        self.prev_action = saturated_output
+        return saturated_output
+
 
     def run_step(self, target_speed, current_speed):
         """
@@ -90,8 +113,9 @@ class LongitudinalController(PIDController):
         Returns:
             float: Throttle or brake command.
         """
-        error = target_speed - current_speed
-        return self.saturation(super().run_step(error))
+        self.target_speed = target_speed
+        self.error = self.target_speed - current_speed
+        return self.saturation(super().run_step(self.error))
 
 class LateralController(PIDController):
     """
@@ -106,8 +130,11 @@ class LateralController(PIDController):
     """
     def __init__(self, params):
         super().__init__(params)
-        self.max_steering = params['max_steering']
+        self.max_steering = params.get('max_steering', 1)
+        self.max_steer_increment = params.get('max_steer_increment', 0.1)
         self.offset = 0
+        self.error = 0
+        self.prev_action = 0
 
     def saturation(self, value):
         """
@@ -119,7 +146,13 @@ class LateralController(PIDController):
         Returns:
             float: The saturated control output.
         """
-        return max(min(value, self.max_steering), -self.max_steering)
+        saturated_output = max(min(value, self.max_steering), -self.max_steering)
+        if saturated_output - self.prev_action > self.max_steer_increment:
+            saturated_output = self.prev_action + self.max_steer_increment
+        elif saturated_output - self.prev_action < -self.max_steer_increment:
+            saturated_output = self.prev_action - self.max_steer_increment
+        self.prev_action = saturated_output
+        return saturated_output
     
     def set_offset(self, offset):
         """Changes the offset"""
@@ -144,9 +177,10 @@ class LateralController(PIDController):
             target_location = target_location.location + carla.Location(x=self._offset*r_vec.x,
                                                          y=self._offset*r_vec.y)
         dx, dy = target_location.x - current_location.x, target_location.y - current_location.y
-        target_yaw = np.arctan2(dy, dx)
-        error = target_yaw - current_yaw
-        return self.saturation(super().run_step(error))
+        self.target_location = target_location
+        self.target_yaw = np.arctan2(dy, dx)
+        self.error = self.target_yaw - current_yaw
+        return self.saturation(super().run_step(self.error))
 
 class CarController:
     """
@@ -198,6 +232,18 @@ class CarController:
     def __init__(self, longitudinal_params, lateral_params, reference):
         self.longitudinal_controller = LongitudinalController(longitudinal_params)
         self.lateral_controller = LateralController(lateral_params)
+        self.reference = reference
+        self.current_index = 0
+        self.done = False
+
+        print_blue("Initializated car controller")
+        print_blue(f"Longitudinal params:")
+        print_red(longitudinal_params)
+        print_blue(f"Lateral params:")
+        print_red(lateral_params)
+
+    def update_reference(self, reference):
+        """Updates the reference trajectory"""
         self.reference = reference
         self.current_index = 0
         self.done = False

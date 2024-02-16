@@ -15,6 +15,7 @@ import networkx as nx
 import carla
 from .local_planner import RoadOption
 from ..tools.misc import vector
+from ...carla.printers import print_blue
 
 class GlobalRoutePlanner(object):
     """
@@ -38,7 +39,7 @@ class GlobalRoutePlanner(object):
         self._find_loose_ends()
         self._lane_change_link()
         
-        print("Created GlobalRoutePlanner in map: ", self._wmap.name, " with sampling resolution: ", self._sampling_resolution)
+        print_blue("Created GlobalRoutePlanner in map: ", self._wmap.name, " with sampling resolution: ", self._sampling_resolution)
 
     def trace_route(self, current_waypoint, destination_waypoint):
         """

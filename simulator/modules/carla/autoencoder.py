@@ -19,6 +19,8 @@ from tensorflow.keras.layers import Convolution2D, AvgPool2D, MaxPooling2D, Conv
 from tensorflow.keras.layers import RandomFlip, RandomRotation
 from tensorflow.keras.layers import Dropout, BatchNormalization, Flatten, Input, SpatialDropout2D
 
+from .printers import print_blue
+
 class AutoEncoder:
     def __init__(self, train_config=None, model_config=None, encoder_config=None, decoder_config=None):
         """
@@ -438,5 +440,5 @@ def load_model(model_name, directory='./saved_models'):
     # for key, value in loaded_autoencoder.history.items():
     #     loaded_autoencoder.history[key] = eval(value)
 
-    print(f"Model, configurations, and training history loaded from {directory}/{model_name}")
+    print_blue(f"Model, configurations, and training history loaded from {directory}/{model_name}")
     return loaded_autoencoder
