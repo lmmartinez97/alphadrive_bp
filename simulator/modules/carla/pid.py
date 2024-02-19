@@ -22,10 +22,9 @@ except IndexError:
 import carla
 
 
-import numpy as np
-import carla
-
 from .printers import print_blue, print_red
+
+from rich import print
 
 class PIDController:
     """
@@ -43,6 +42,8 @@ class PIDController:
         self.max_integral_threshold = params.get('max_integral_threshold', None)
         self.prev_error = 0
         self.integral = 0
+        self.error = 0
+        print(self.__dict__)
 
     def run_step(self, error):
         """
@@ -51,9 +52,10 @@ class PIDController:
         Returns:
             float: The control output.
         """
-        self.integral += error * self.dt
+        self.error = error
         if self.max_integral_threshold and self.integral > self.max_integral_threshold:
             self.integral = 0 #reset integral to avoid windup
+        self.integral += error * self.dt
         derivative = (error - self.prev_error) / self.dt
         output = self.Kp * error + self.Ki * self.integral + self.Kd * derivative
         self.prev_error = error
@@ -86,18 +88,10 @@ class LongitudinalController(PIDController):
         Returns:
             float: The saturated control output.
         """
-        saturated_output = max(min(value, self.max_throttle), -self.max_brake)
+        saturated_output = np.clip(value, -self.max_brake, self.max_throttle)
+        increment = self.max_throttle_increment if saturated_output > 0 else self.max_brake_increment
+        saturated_output = np.clip(saturated_output, self.prev_action - increment, self.prev_action + increment)
 
-        if saturated_output > 0:
-            if saturated_output - self.prev_action > self.max_throttle_increment:
-                saturated_output = self.prev_action + self.max_throttle_increment
-            elif saturated_output - self.prev_action < -self.max_throttle_increment:
-                saturated_output = self.prev_action - self.max_throttle_increment
-        else:
-            if saturated_output - self.prev_action > self.max_brake_increment:
-                saturated_output = self.prev_action + self.max_brake_increment
-            elif saturated_output - self.prev_action < -self.max_brake_increment:
-                saturated_output = self.prev_action - self.max_brake_increment
         self.prev_action = saturated_output
         return saturated_output
 
@@ -115,7 +109,15 @@ class LongitudinalController(PIDController):
         """
         self.target_speed = target_speed
         self.error = self.target_speed - current_speed
-        return self.saturation(super().run_step(self.error))
+        self.action = self.saturation(super().run_step(self.error))
+        # print("Longitudinal controller action breakdown")
+        # print("Integral: ", self.Ki * self.integral)
+        # print("Proportional: ", self.Kp * self.error)
+        # print("Derivative: ", self.Kd * ((self.error - self.prev_error) / self.dt))
+        # print("Action: ", self.action)
+        # print()
+        return self.action
+
 
 class LateralController(PIDController):
     """
@@ -131,8 +133,8 @@ class LateralController(PIDController):
     def __init__(self, params):
         super().__init__(params)
         self.max_steering = params.get('max_steering', 1)
-        self.max_steer_increment = params.get('max_steer_increment', 0.1)
-        self.offset = 0
+        self.max_steer_increment = params.get('max_steer_increment', 1)
+        self.distance_threshold = params.get('distance_threshold', 2)
         self.error = 0
         self.prev_action = 0
 
@@ -146,41 +148,53 @@ class LateralController(PIDController):
         Returns:
             float: The saturated control output.
         """
-        saturated_output = max(min(value, self.max_steering), -self.max_steering)
-        if saturated_output - self.prev_action > self.max_steer_increment:
-            saturated_output = self.prev_action + self.max_steer_increment
-        elif saturated_output - self.prev_action < -self.max_steer_increment:
-            saturated_output = self.prev_action - self.max_steer_increment
+        saturated_output = np.clip(value, -self.max_steering, self.max_steering)
+        saturated_output = np.clip(saturated_output, self.prev_action - self.max_steer_increment, self.prev_action + self.max_steer_increment)
         self.prev_action = saturated_output
         return saturated_output
-    
-    def set_offset(self, offset):
-        """Changes the offset"""
-        self.offset = offset
 
-    def run_step(self, target_location, current_location, current_yaw):
+    def run_step(self, target_location, current_transform):
         """
         Runs one step of the lateral controller.
 
         Args:
-            target_location (carla.Location): The target location.
-            current_location (carla.Location): The current location.
-            current_yaw (float): The current yaw angle.
+            target_location (carla.Location): The current target location.
+            current_transform (carla.Transform): The current transform of the ego vehicle.
 
         Returns:
             float: Steering command.
         """
-        
-        if self.offset != 0:
-            # Displace the wp to the side
-            r_vec = target_location.get_right_vector()
-            target_location = target_location.location + carla.Location(x=self._offset*r_vec.x,
-                                                         y=self._offset*r_vec.y)
-        dx, dy = target_location.x - current_location.x, target_location.y - current_location.y
         self.target_location = target_location
-        self.target_yaw = np.arctan2(dy, dx)
-        self.error = self.target_yaw - current_yaw
-        return self.saturation(super().run_step(self.error))
+        current_location = current_transform.location
+        dx, dy = target_location.x - current_location.x, target_location.y - current_location.y
+        distance_to_target = np.hypot(dx, dy)
+
+        # If the distance to the target is below a certain threshold, maintain value of error
+        if distance_to_target > self.distance_threshold:
+            v_vec = current_transform.get_forward_vector()
+            v_vec = np.array([v_vec.x, v_vec.y, 0.0])
+            w_vec = np.array([self.target_location.x - current_location.x,
+                            self.target_location.y - current_location.y,
+                            0.0])
+            wv_linalg = np.linalg.norm(w_vec) * np.linalg.norm(v_vec)
+            if wv_linalg == 0:
+                self.error = 0
+            else:
+                self.error = np.arccos(np.clip(np.dot(w_vec, v_vec) / (wv_linalg), -1.0, 1.0))
+            _cross = np.cross(v_vec, w_vec)
+            if _cross[2] < 0:
+                self.error *= -1.0
+        else:
+            self.error = 0
+                        
+        self.action = self.saturation(super().run_step(self.error))
+        # print("Lateral controller action breakdown")
+        # print("Integral: ", self.Ki * self.integral)
+        # print("Proportional: ", self.Kp * self.error)
+        # print("Derivative: ", self.Kd * ((self.error - self.prev_error) / self.dt))
+        # print("Action: ", self.action)
+        # print()
+        return self.action
 
 class CarController:
     """
@@ -235,6 +249,7 @@ class CarController:
         self.reference = reference
         self.current_index = 0
         self.done = False
+        self.offset = 0
 
         print_blue("Initializated car controller")
         print_blue(f"Longitudinal params:")
@@ -242,6 +257,10 @@ class CarController:
         print_blue(f"Lateral params:")
         print_red(lateral_params)
 
+    def set_offset(self, offset):
+        """Changes the offset"""
+        self.offset = offset
+        
     def update_reference(self, reference):
         """Updates the reference trajectory"""
         self.reference = reference
@@ -261,19 +280,39 @@ class CarController:
 
         The function calculates the target speed and location based on the reference trajectory. It checks if the car has reached the target location, and if so, it updates the target to the next point in the reference trajectory. It then uses a longitudinal controller to generate a throttle or brake command based on the current and target speeds, and a lateral controller to generate a steering command based on the current and target locations and the car's current yaw angle. The throttle, brake, and steering commands are packaged into a carla.Control object and returned.
         """
-        target_speed, target_location = self.reference[self.current_index]
+        target_speed, target_transform = self.reference[self.current_index][0], self.reference[self.current_index][1]
         current_location = current_transform.location
         current_yaw = np.deg2rad(current_transform.rotation.yaw)
-
-        # Check if the car has reached the target location
-        if np.linalg.norm(np.array([target_location.x, target_location.y]) - np.array([current_location.x, current_location.y])) < 2.0:
-            self.current_index += 1
-            if self.current_index >= len(self.reference):
-                self.current_index = len(self.reference) - 1
-                self.done = True
+        target_location = target_transform.location
+        if self.offset != 0:
+            # Displace the wp to the side
+            r_vec = target_transform.get_right_vector()
+            target_location_displaced = target_location + carla.Location(x=self.offset*r_vec.x,
+                                                         y=self.offset*r_vec.y)
+            #print("Displaced target location: ", target_location_displaced, "from: ", target_location, "offset: ", self.offset, "r_vec: ", r_vec)
+        else:
+            target_location_displaced = target_location
+            
+        #check if we need to advance the reference
+        v1 = np.array([target_location.x - current_location.x, target_location.y - current_location.y])
+        if self.current_index < len(self.reference) - 1:
+            next_target_location = self.reference[self.current_index + 1][1].location
+            v2 = np.array([next_target_location.x - target_location.x, next_target_location.y - target_location.y])
+            dot_product = np.dot(v1, v2)
+            # print("Current location:", current_location)
+            # print("Target location:", target_location)
+            # print("Next target location:", next_target_location)
+            # print("V1: ", v1)
+            # print("V2: ", v2)
+            # print("Dot product: ", dot_product)
+            if dot_product < 0:
+                #print("Advancing reference from: ", target_location, "to: ", next_target_location)
+                self.current_index += 1
+        else:
+            self.done = True
 
         throttle_brake = self.longitudinal_controller.run_step(target_speed, current_speed)
-        steering = self.lateral_controller.run_step(target_location, current_location, current_yaw)
+        steering = self.lateral_controller.run_step(target_location=target_location_displaced, current_transform= current_transform)
         throttle = max(throttle_brake, 0)
         brake = max(-throttle_brake, 0)
         

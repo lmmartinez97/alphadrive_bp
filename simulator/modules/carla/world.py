@@ -327,6 +327,9 @@ class World(object):
                     z=row["zAngVelocity"],
                 )
             )
+            
+        self.world.tick()
+        self.world.tick()
 
     def next_weather(self, reverse=False):
         """Get next weather setting"""

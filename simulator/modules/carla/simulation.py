@@ -74,13 +74,14 @@ class Simulation:
         print()
         self.episode_counter = 0
         self.frame_counter = 0
+        self.decision_counter = 0
         self.args = args
         if not frame_limit:
             self.frame_limit = np.inf
         else:
             self.frame_limit = frame_limit
         self.episode_limit = episode_limit
-        self.simulation_period = 0.01
+        self.simulation_period = 0.1
         self.decision_period_seconds = 1
         self.decision_period = int(self.decision_period_seconds / self.simulation_period)
         self.available_actions = {
@@ -88,6 +89,7 @@ class Simulation:
             1: 4, #introduce a one lane offset to the right
             2: -4 #introduce a one lane offset to the left
         }
+        self.smooth_frames = self.decision_period_seconds / self.simulation_period
 
         #record variables for plotting
         self.yaw = []
@@ -133,12 +135,12 @@ class Simulation:
         #load autoencoder
         self.autoencoder = load_model(model_name= "autoencoder_1" ,directory="../scene_representation/training/saved_models")
         #Initialize GlobalRoutePlanner
-        self.grp = GlobalRoutePlanner(wmap=self.world.map, sampling_resolution=2) # Sampling resolution of 2 meters
+        self.grp = GlobalRoutePlanner(wmap=self.world.map, sampling_resolution=10) 
         #Initialize Potential Field
         rx = 50 # horizontal semiaxis of ellipse to consider as ROI
         ry = 6 # vertical semiaxis of ellipse to consider as ROI
-        sx = 0.5
-        sy = 0.1
+        sx = 0.5 # step size in x direction
+        sy = 0.1 # step size in y direction
         self.potential_field = PotentialField(radius_x = rx, radius_y = ry, step_x = sx, step_y = sy)
         
         #Configure PID controllers
@@ -154,13 +156,15 @@ class Simulation:
             'max_integral_threshold': 0.5,
         }
         self.lateral_params = {
-            'Kp': 0.9,
-            'Ki': 0.03,
-            'Kd': 0,
+            'Kp': 0.15,
+            'Ki': 0.05,
+            'Kd': 0.1,
             'dt': self.world.delta_seconds,
-            'max_steering': 1.0,
-            'max_steering_increment': 0.03,
+            'max_steering': 1,
+            'max_steering_increment': 1,
+            'max_integral_threshold': None,
         }
+    
         self.pid = CarController(longitudinal_params=self.longitudinal_params, lateral_params=self.lateral_params, reference=None)
 
         self.controller = KeyboardControl(self.world)
@@ -171,6 +175,7 @@ class Simulation:
         self.world.restart(self.args)
     
         self.agent_type = self.agents_dict[self.args.behavior]
+        self.agent_type.max_speed = 35
         #hand over control of npcs to traffic manager
         self.traffic_manager.set_synchronous_mode(True)
         for vehicle in self.world.npcs:
@@ -183,7 +188,7 @@ class Simulation:
             
         # Set the agent destination
         self.route = self.grp.trace_route(self.world.spawn_waypoint, self.world.dest_waypoint)
-        self.reference = [[self.agent_type.max_speed, waypoint.transform.location] for waypoint, _ in self.route]
+        self.reference = [[self.agent_type.max_speed, waypoint.transform] for waypoint, _ in self.route[1:]]
         self.pid.update_reference(self.reference)
 
         self.world.player.set_transform(self.world.spawn_point_ego)
@@ -201,7 +206,9 @@ class Simulation:
                 color=carla.Color(255, 0, 0),
                 life_time=100,
             )
-
+        self.world.player.set_target_velocity(carla.Vector3D(x=self.agent_type.max_speed/3.6, y=0, z=0))
+        self.world.world.tick()
+        self.world.world.tick()
         # Clear record variables
         self.yaw.clear()
         self.throttle_brake.clear()
@@ -210,12 +217,13 @@ class Simulation:
         self.position.clear()
         self.vel_target.clear()
         self.pos_target.clear()
-        self.yaw_target.clear()
         self.lat_error.clear()
         self.lon_error.clear()
         self.time.clear()
-
-    def game_step(self, verbose = False, action = None, recording = False):
+        
+        self.action = 0
+        
+    def game_step(self, verbose = False, recording = False):
         self.clock.tick()
         self.world.world.tick()
         self.world.tick(self.clock, self.episode_counter, self.frame_counter)
@@ -228,17 +236,26 @@ class Simulation:
 
         if self.controller and self.controller.parse_events():
             return -1, -1, prev_timestamp
-        
-        if self.frame_counter % self.decision_period == 0 and action is not None:
-            self.pid.lateral_controller.set_offset(self.available_actions[action])
-            self.decision_period += 1
-        else:
-            self.pid.lateral_controller.set_offset(0)
+                    
+        target_offset = self.available_actions[self.action]
+        if self.frame_counter % self.decision_period == 0 and self.action is not None:
+            self.offset_step = (target_offset - self.pid.offset) / self.smooth_frames
+            self.decision_counter += 1
+            if self.decision_counter % 15 == 0:
+                print("Toggling action")
+                self.action = 0 if self.action == 2 else 2
+                print("New action: ", self.action)
+                
+        if self.offset_step != 0:
+            new_offset = self.pid.offset + self.offset_step
+            self.pid.set_offset(new_offset)
+            if abs(new_offset - target_offset) < abs(self.offset_step):
+                self.offset_step = 0
 
         self.world.record_frame_state(frame_number=self.frame_counter)
-        self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
-        pf = self.potential_field.calculate_field()
-        state = self.autoencoder.encode(pf).flatten()
+        # self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
+        # pf = self.potential_field.calculate_field()
+        # state = self.autoencoder.encode(pf).flatten()
         
         velocity = self.world.player.get_velocity()
         speed = 3.6 * np.sqrt(velocity.x**2 + velocity.y**2)
@@ -255,15 +272,24 @@ class Simulation:
         self.position.append(self.world.player.get_location())
         self.vel_target.append(self.pid.longitudinal_controller.target_speed)
         self.pos_target.append(self.pid.lateral_controller.target_location)
-        self.yaw_target.append(self.pid.lateral_controller.target_yaw)
         self.lon_error.append(self.pid.longitudinal_controller.error)
         self.lat_error.append(self.pid.lateral_controller.error)
         self.time.append(timestamp.elapsed_seconds - self.first_timestamp.elapsed_seconds)
+        
+        # #print control singals, errors and values for debugging
+        if 1:
+        #     print()
+        #     print("Control: ", control)
+        #     print("Lateral control:")
+        #     print("Lat error: ", self.pid.lateral_controller.error)
+            print("Current location: ", self.world.player.get_location())
+            print("Target location: ", self.pid.lateral_controller.target_location)
+            print("Frame: ", self.frame_counter)
 
         #await send_log_data(log_host, log_port, frame_df)
         prev_timestamp = timestamp
 
-        if verbose:
+        if 0:
             print("State: ", state)
             print("State len: ", len(state))
             print("Frame: ", self.frame_counter)
@@ -272,48 +298,55 @@ class Simulation:
             self.autoencoder.compare(pf, num_plots=1)
             input("Press Enter to continue")
             
-        return state
+        return 1
     
     def plot_results(self):
-        """Method for plotting the results of the simulation"""
+        """
+        Plots the results of the simulation.
+        """
         width = 2
-        fig, ax = plt.subplots(2, 2, figsize=(15, 15))
-        ax[0, 0].plot(self.time ,self.yaw_target, label="Target Yaw", linewidth=width)
-        ax[0, 0].plot(self.time,self.lat_error, label="Lateral Error", linewidth=width)
-        ax[0, 0].set_title("Yaw")
-        ax[0, 0].set_xlabel("Time")
-        ax[0, 0].set_ylabel("Yaw")
-        ax[0, 0].legend()
+        figsize = (15, 15)
+        # Speed and Throttle/Brake figure
+        fig, ax = plt.subplots(2, 1, figsize=figsize)
+        ax[0].plot(self.time,self.speed, label="Speed", linewidth=width)
+        ax[0].plot(self.time,self.vel_target, label="Target Speed", linewidth=width)
+        ax[0].plot(self.time,self.lon_error, label="Longitudinal Error", linewidth=width)
+        ax[0].set_title("Speed")
+        ax[0].set_xlabel("Time")
+        ax[0].set_ylabel("Speed (m/s)")
+        ax[0].legend()
 
-        ax[0, 1].plot(self.time,self.speed, label="Speed", linewidth=width)
-        ax[0, 1].plot(self.time,self.vel_target, label="Target Speed", linewidth=width)
-        ax[0, 1].plot(self.time,self.lon_error, label="Longitudinal Error", linewidth=width)
-        ax[0, 1].set_title("Speed")
-        ax[0, 1].set_xlabel("Time")
-        ax[0, 1].set_ylabel("Speed")
-        ax[0, 1].legend()
+        ax[1].plot(self.time,self.throttle_brake, label="Throttle/Brake", linewidth=width)
+        ax[1].plot(self.time, np.gradient(self.throttle_brake), label="ThrottleBrake Derivative", linewidth=width)
+        ax[1].set_title("Throttle/Brake")
+        ax[1].set_xlabel("Time")
+        ax[1].set_ylabel("Throttle/Brake")
+        ax[1].legend()
 
-        ax[1, 0].plot(self.time,self.steer, label="Steer", linewidth=width)
-        ax[1, 0].plot(self.time, np.gradient(self.steer), label="Steer Derivative", linewidth=2)
-        ax[1, 0].set_title("Steer")
-        ax[1, 0].set_xlabel("Time")
-        ax[1, 0].set_ylabel("Steer")
-        ax[1, 0].legend()
+        # Steer and Lateral control figure
+        fig, ax = plt.subplots(2, 1, figsize=figsize)
+        ax[0].plot(self.time , [0]*len(self.time), label="Lateral error reference", linewidth=width)
+        ax[0].plot(self.time,self.lat_error, label="Lateral Error", linewidth=width)
+        ax[0].set_title("Lateral control")
+        ax[0].set_xlabel("Time")
+        ax[0].set_ylabel("Yaw")
+        ax[0].legend()
 
-        ax[1, 1].plot(self.time,self.throttle_brake, label="Throttle/Brake", linewidth=width)
-        ax[1, 1].plot(self.time, np.gradient(self.throttle_brake), label="ThrottleBrake Derivative", linewidth=2)
-        ax[1, 1].set_title("Throttle/Brake")
-        ax[1, 1].set_xlabel("Time")
-        ax[1, 1].set_ylabel("Throttle/Brake")
-        ax[1, 1].legend()
+        ax[1].plot(self.time,self.steer, label="Steer", linewidth=width)
+        ax[1].plot(self.time, np.gradient(self.steer), label="Steer Derivative", linewidth=width)
+        ax[1].set_title("Steer")
+        ax[1].set_xlabel("Time")
+        ax[1].set_ylabel("Steer")
+        ax[1].legend()
 
-        fig, ax = plt.subplots(figsize=(15, 15))
-        ax.plot([pos.x for pos in self.position], [pos.y for pos in self.position], label="Position", linewidth=width)
-        ax.plot([pos.x for pos in self.pos_target], [pos.y for pos in self.pos_target], label="Target Position", linewidth=width)
-        ax.set_title("Position")
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.legend()
+        # Position figure
+        plt.figure(figsize=figsize)
+        plt.plot([pos.x for pos in self.position], [pos.y for pos in self.position], label="Position", linewidth=width)
+        plt.plot([pos.x for pos in self.pos_target], [pos.y for pos in self.pos_target], label="Target Position", linewidth=width)
+        plt.title("Position")
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        plt.legend()
 
         plt.show()
 
@@ -323,12 +356,13 @@ class Simulation:
         while self.episode_counter < self.episode_limit:
             while (self.frame_counter < self.frame_limit) and not self.pid.done:
                 if self.frame_counter % 100 == 0:
-                    verbose = False
+                    verbose = True
                 self.game_step(verbose=verbose)
                 self.frame_counter += 1
             self.plot_results()
             input("Press Enter to continue")
             self.frame_counter = 0
+            self.decision_counter = 0
             print("Restored frame state")
             print("Finished episode ", self.episode_counter, " initializing next episode")
             self.episode_counter += 1

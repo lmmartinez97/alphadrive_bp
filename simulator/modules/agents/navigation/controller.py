@@ -246,9 +246,6 @@ class PIDLateralController():
         if _cross[2] < 0:
             _dot *= -1.0
 
-        _dot = normalize_angle(_dot)
-        print("Current error angle is: ", _dot)
-
         self._e_buffer.append(_dot)
         if len(self._e_buffer) >= 2:
             _de = (self._e_buffer[-1] - self._e_buffer[-2]) / self._dt
