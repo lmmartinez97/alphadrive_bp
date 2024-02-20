@@ -4,7 +4,7 @@
 from __future__ import division
 
 import math
-import numpy
+import numpy as np
 
 from helpers import SharedStorage, ReplayBuffer, AlphaZeroConfig, Game, Node
 from network import Network
@@ -29,8 +29,8 @@ def run_selfplay(
 
     """
     network = storage.latest_network()
-
     for _ in range(config.games_per_iteration):
+        simulation.init_game()
         game = play_game(config, network, simulation)
         replay_buffer.save_game(game)
 
@@ -51,9 +51,9 @@ def play_game(config: AlphaZeroConfig, network: Network, simulation: Simulation)
         Game: The final state of the game after completing the self-play.
     """
     game = Game()
-    while not game.terminal() and len(game.history) < config.max_moves:
-        action, root = run_mcts(config, game, network)
-        game.apply(action, simulation)
+    while not simulation.is_terminal() and len(game.history) < config.max_moves:
+        action, root = run_mcts(config, game, network, simulation)
+        game.apply(action, simulation, recording=True)
         game.store_search_statistics(root)
     return game
 
@@ -93,13 +93,15 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
         # Traverse the tree until we reach an unexpanded node
         while node.expanded():
             action, node = select_child(config, node)
-            scratch_game.apply(action=action, simulation=simulation)
+            scratch_game.apply(action=action, simulation=simulation, recording=False)
             search_path.append(node)
 
         # Evaluate the leaf node and propagate the value back up the search path
         value = evaluate(node, scratch_game, network)
         backpropagate(search_path, value, scratch_game.to_play())
         
+    #return simulation to the original state
+    simulation.world.restore_frame_state(frame_number=len(game.action_history))
     # Select the best action from the root node
     return select_action(config, game, root), root
 

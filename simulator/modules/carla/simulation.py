@@ -191,9 +191,7 @@ class Simulation:
         self.reference = [[self.agent_type.max_speed, waypoint.transform] for waypoint, _ in self.route[1:]]
         self.pid.update_reference(self.reference)
 
-        self.world.player.set_transform(self.world.spawn_point_ego)
-        self.clock.tick()
-        self.world.world.tick()
+
         self.world.dataframe = pd.DataFrame()
 
         self.prev_timestamp = self.world.world.get_snapshot().timestamp
@@ -223,6 +221,106 @@ class Simulation:
         
         self.action = 0
         
+    def mcts_step(self, verbose = False, recording = False, action = 0):
+        self.action = action
+        #Discern action and get target offset
+        target_offset = self.available_actions[self.action]
+        self.offset_step = (target_offset - self.pid.offset) / self.smooth_frames
+
+        for _ in range(self.decision_period):
+            #Calculate current trajectory offset
+            if self.offset_step != 0:
+                new_offset = self.pid.offset + self.offset_step
+                self.pid.set_offset(new_offset)
+                if abs(new_offset - target_offset) < abs(self.offset_step):
+                    self.offset_step = 0
+                
+            #Get ego vehicle variables and run PID controller
+            velocity = self.world.player.get_velocity()
+            speed = 3.6 * np.sqrt(velocity.x**2 + velocity.y**2)
+            transform = self.world.player.get_transform()
+            control = self.pid.run_step(current_speed=speed, current_transform=transform)
+            control.manual_gear_shift = False
+            self.world.player.apply_control(control)
+            
+            #record control signals for plotting
+            self.yaw.append(self.world.player.get_transform().rotation.yaw)
+            self.throttle_brake.append(control.throttle - control.brake)
+            self.steer.append(control.steer)
+            self.speed.append(speed)
+            self.position.append(self.world.player.get_location())
+            self.vel_target.append(self.pid.longitudinal_controller.target_speed)
+            self.pos_target.append(self.pid.lateral_controller.target_location)
+            self.lon_error.append(self.pid.longitudinal_controller.error)
+            self.lat_error.append(self.pid.lateral_controller.error)
+            self.time.append(prev_timestamp.elapsed_seconds - self.first_timestamp.elapsed_seconds)
+        
+            #Tick the clock to advance the simulation
+            self.clock.tick()
+            self.world.world.tick()
+            self.world.tick(self.clock, self.episode_counter, self.frame_counter)
+
+            prev_timestamp = self.world.world.get_snapshot().timestamp
+            self.frame_counter += 1
+
+        if self.display:
+            self.world.render(self.display)
+            pygame.display.flip()
+
+        self.potential_field.update(self.world.return_frame_history(frame_number=self.decision_counter, history_length=5))
+        pf = self.potential_field.calculate_field()
+        state = self.autoencoder.encode(pf).flatten()
+        
+        if recording: #if the simulation is being run from game step, NOT from MCTS search
+            self.world.record_frame_state(frame_number=self.decision_counter)
+            self.decision_counter += 1
+        
+        if 0:
+            print("State: ", state)
+            print("State len: ", len(state))
+            print("Frame: ", self.frame_counter)
+            print("Control action: ", control)
+            self.potential_field.plot_field()
+            self.autoencoder.compare(pf, num_plots=1)
+            input("Press Enter to continue")
+            
+        return state
+    
+    def is_terminal(self):
+        """
+        Method for checking if the current state is terminal
+        """
+        ret = False
+        if self.frame_counter >= self.frame_limit:
+            ret = True
+        if self.pid.done:
+            ret = True
+        if len(self.world.collision_sensor.get_collision_history()) > 0:
+            ret = True
+        
+        return ret
+    
+    def get_reward(self):
+        """
+        Method for getting the reward for the current state
+        """
+        reward = 0
+        if self.pid.done:
+            reward = 100
+        if len(self.world.collision_sensor.get_collision_history()) > 0:
+            reward = -100
+        return reward
+    
+    def get_state(self, decision_index):
+        """
+        Method for getting the state at the current decision index
+        """
+        self.world.record_frame_state(frame_number=decision_index)
+        self.potential_field.update(self.world.return_frame_history(frame_number=decision_index, history_length=5))
+        pf = self.potential_field.calculate_field()
+        state = self.autoencoder.encode(pf).flatten()
+        return state
+    
     def game_step(self, verbose = False, recording = False):
         self.clock.tick()
         self.world.world.tick()
@@ -253,9 +351,9 @@ class Simulation:
                 self.offset_step = 0
 
         self.world.record_frame_state(frame_number=self.frame_counter)
-        # self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
-        # pf = self.potential_field.calculate_field()
-        # state = self.autoencoder.encode(pf).flatten()
+        self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
+        pf = self.potential_field.calculate_field()
+        state = self.autoencoder.encode(pf).flatten()
         
         velocity = self.world.player.get_velocity()
         speed = 3.6 * np.sqrt(velocity.x**2 + velocity.y**2)
@@ -276,20 +374,20 @@ class Simulation:
         self.lat_error.append(self.pid.lateral_controller.error)
         self.time.append(timestamp.elapsed_seconds - self.first_timestamp.elapsed_seconds)
         
-        # #print control singals, errors and values for debugging
-        if 1:
-        #     print()
-        #     print("Control: ", control)
-        #     print("Lateral control:")
-        #     print("Lat error: ", self.pid.lateral_controller.error)
-            print("Current location: ", self.world.player.get_location())
-            print("Target location: ", self.pid.lateral_controller.target_location)
-            print("Frame: ", self.frame_counter)
+        # #print control signals, errors and values for debugging
+        # if 1:
+        # #     print()
+        # #     print("Control: ", control)
+        # #     print("Lateral control:")
+        # #     print("Lat error: ", self.pid.lateral_controller.error)
+        #     print("Current location: ", self.world.player.get_location())
+        #     print("Target location: ", self.pid.lateral_controller.target_location)
+        #     print("Frame: ", self.frame_counter)
 
         #await send_log_data(log_host, log_port, frame_df)
         prev_timestamp = timestamp
 
-        if 0:
+        if verbose:
             print("State: ", state)
             print("State len: ", len(state))
             print("Frame: ", self.frame_counter)

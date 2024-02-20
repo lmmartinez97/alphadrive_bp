@@ -15,7 +15,7 @@ import tensorflow as tf
 
 from copy import deepcopy
 from network import Network
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Union, Tuple, bool
 from utils import make_uniform_network
 
 from ..carla.simulation import Simulation
@@ -100,7 +100,7 @@ class Node(object):
             prior (float): Prior probability of selecting the node.
         """
         self.visit_count: int = 0
-        self.to_play: int = -1
+        self.state: List[float] = []
         self.prior: float = prior
         self.value_sum: float = 0
         self.children: Dict[int, 'Node'] = {}
@@ -156,7 +156,7 @@ class Game:
         self.action_history = action_history or []
         self.state_history = state_history or []
         self.child_visits = []
-        self.num_actions = 4672  # action space size for chess; 11259 for shogi, 362 for Go
+        self.num_actions = 3  # action space size for chess; 11259 for shogi, 362 for Go
 
     def terminal(self) -> bool:
         """
@@ -167,7 +167,7 @@ class Game:
         """
         pass
 
-    def terminal_value(self, to_play: int) -> float:
+    def terminal_value(self) -> float:
         """
         Returns the reward associated with the terminal state of the current game.
 
@@ -185,8 +185,13 @@ class Game:
 
         Returns:
             List[int]: List of legal actions.
+            
+        Available actions:
+            - 0: straight
+            - 1: shift right
+            - 2: shift left
         """
-        return []
+        return [0, 1, 2]
 
     def clone(self) -> "Game":
         """
@@ -197,14 +202,15 @@ class Game:
         """
         return copy.deepcopy(self)
 
-    def apply(self, action: int):
+    def apply(self, action: int, recording: bool, simulation: 'Simulation'):
         """
         Applies an action to the game state.
 
         Args:
             action (int): The action to be applied.
         """
-        pass
+        state = simulation.mcts_step(verbose=False, recording=recording, action=action)
+        return state
 
     def store_search_statistics(self, root: "Node"):
         """
@@ -221,7 +227,7 @@ class Game:
             ]
         )
 
-    def make_image(self, state_index: int) -> List[np.array]:
+    def make_image(self, simulation: 'Simulation', state_index: int) -> List[np.array]:
         """
         Constructs a game-specific feature representation.
 
@@ -229,11 +235,11 @@ class Game:
             state_index (int): The index of the current game state.
 
         Returns:
-            List[np.array]: List of feature planes representing the game state.
+            List[float]: List of feature planes representing the game state. Comes from autoencoder
         """
-        return []
+        return simulation.get_state(state_index)
 
-    def make_target(self, state_index: int) -> Tuple[float, List[float]]:
+    def make_target(self, simulation: 'Simulation', state_index: int) -> Tuple[float, List[float]]:
         """
         Constructs a target tuple for training.
 
@@ -243,17 +249,8 @@ class Game:
         Returns:
             Tuple[float, List[float]]: Target value and policy for training the neural network.
         """
-        return (self.terminal_value(state_index % 2), self.child_visits[state_index])
-
-    def to_play(self) -> int:
-        """
-        Returns the current player.
-
-        Returns:
-            int: The current player.
-        """
-        return len(self.action_history) % 2
-
+        return (simulation.get_reward(), self.child_visits[state_index])
+    
 class ReplayBuffer:
     """
     A replay buffer for storing and sampling self-play game data.
