@@ -56,8 +56,7 @@ from .printers import print_blue, print_green, print_highlight, print_red
 from .world import World
 from .hud import HUD
 from .potential_field import PotentialField
-from .pid import CarController
-
+from .mpc import MPCController
 from ..agents.navigation.global_route_planner import GlobalRoutePlanner
 from ..agents.navigation.behavior_types import Cautious, Normal, Aggressive
 
@@ -109,6 +108,9 @@ class Simulation:
         pygame.font.init()
         
         self.agents_dict = {"cautious": Cautious, "normal": Normal, "aggressive": Aggressive}
+        self.agent_type = self.agents_dict[self.args.behavior]
+        self.agent_type.max_speed = 35
+        
         #include static camera
         if self.args.static_camera:
             self.args.width *= 2
@@ -135,7 +137,7 @@ class Simulation:
         #load autoencoder
         self.autoencoder = load_model(model_name= "autoencoder_1" ,directory="../scene_representation/training/saved_models")
         #Initialize GlobalRoutePlanner
-        self.grp = GlobalRoutePlanner(wmap=self.world.map, sampling_resolution=10) 
+        self.grp = GlobalRoutePlanner(wmap=self.world.map, sampling_resolution=self.simulation_period * self.agent_type.max_speed / 3.6) 
         #Initialize Potential Field
         rx = 50 # horizontal semiaxis of ellipse to consider as ROI
         ry = 6 # vertical semiaxis of ellipse to consider as ROI
@@ -143,39 +145,33 @@ class Simulation:
         sy = 0.1 # step size in y direction
         self.potential_field = PotentialField(radius_x = rx, radius_y = ry, step_x = sx, step_y = sy)
         
-        #Configure PID controllers
-        self.longitudinal_params = {
-            'Kp': 0.75,
-            'Ki': 0.25,
-            'Kd': 0.05,
-            'dt': self.world.delta_seconds,
-            'max_throttle': 0.75,
-            'max_brake': 0.5,
-            'max_throttle_increment': 0.05,
-            'max_brake_increment': 0.03,
-            'max_integral_threshold': 0.5,
+        #initialize MPC controller
+        parameters = {
+            'mass': 1500,
+            'L': 2.7,
+            'a': 1.2,
+            'b': 1.5,
+            'frontal_area': 2.4,
+            'drag_coefficient': 0.24,
+            'max_acceleration': 2.5,
+            'max_deceleration': 4,
+            'air_density': 1.2,
+            'gravity': 9.81,
+            'dt': self.simulation_period,
+            'prediction_horizon': 4,
+            'max_steering_rate': 0.05,
+            'tracking_cost_weight': 1,
+            'velocity_cost_weight': 5
         }
-        self.lateral_params = {
-            'Kp': 0.15,
-            'Ki': 0.05,
-            'Kd': 0.1,
-            'dt': self.world.delta_seconds,
-            'max_steering': 1,
-            'max_steering_increment': 1,
-            'max_integral_threshold': None,
-        }
-    
-        self.pid = CarController(longitudinal_params=self.longitudinal_params, lateral_params=self.lateral_params, reference=None)
-
+        self.mpc = MPCController(parameters)
+        
         self.controller = KeyboardControl(self.world)
         self.clock = pygame.time.Clock()
 
     def init_game(self):
         """Method for initializing a new episode"""
         self.world.restart(self.args)
-    
-        self.agent_type = self.agents_dict[self.args.behavior]
-        self.agent_type.max_speed = 35
+
         #hand over control of npcs to traffic manager
         self.traffic_manager.set_synchronous_mode(True)
         for vehicle in self.world.npcs:
@@ -188,12 +184,10 @@ class Simulation:
             
         # Set the agent destination
         self.route = self.grp.trace_route(self.world.spawn_waypoint, self.world.dest_waypoint)
-        self.reference = [[self.agent_type.max_speed, waypoint.transform] for waypoint, _ in self.route[1:]]
-        self.pid.update_reference(self.reference)
-
+        self.reference = [[[waypoint.transform.location.x, waypoint.transform.location.y, waypoint.transform.location.z], self.agent_type.max_speed] for waypoint, _ in self.route]
+        self.mpc.update_reference(self.reference)
 
         self.world.dataframe = pd.DataFrame()
-
         self.prev_timestamp = self.world.world.get_snapshot().timestamp
         self.first_timestamp = self.prev_timestamp
 
@@ -337,18 +331,12 @@ class Simulation:
                     
         target_offset = self.available_actions[self.action]
         if self.frame_counter % self.decision_period == 0 and self.action is not None:
-            self.offset_step = (target_offset - self.pid.offset) / self.smooth_frames
             self.decision_counter += 1
             if self.decision_counter % 15 == 0:
                 print("Toggling action")
                 self.action = 0 if self.action == 2 else 2
                 print("New action: ", self.action)
-                
-        if self.offset_step != 0:
-            new_offset = self.pid.offset + self.offset_step
-            self.pid.set_offset(new_offset)
-            if abs(new_offset - target_offset) < abs(self.offset_step):
-                self.offset_step = 0
+                self.mpc.set_offset(self.available_actions[self.action])
 
         self.world.record_frame_state(frame_number=self.frame_counter)
         self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
@@ -356,22 +344,41 @@ class Simulation:
         state = self.autoencoder.encode(pf).flatten()
         
         velocity = self.world.player.get_velocity()
-        speed = 3.6 * np.sqrt(velocity.x**2 + velocity.y**2)
+        speed = np.sqrt(velocity.x**2 + velocity.y**2)
         transform = self.world.player.get_transform()
-        control = self.pid.run_step(current_speed=speed, current_transform=transform)
-        control.manual_gear_shift = False
+        mpc_state = {
+            'x': transform.location.x,
+            'y': transform.location.y,
+            'yaw': transform.rotation.yaw,
+            'velocity': speed,
+            'pitch': transform.rotation.pitch,
+        }
+        control_actions, predictions = self.mpc(state=mpc_state)
+        control = carla.VehicleControl(
+            steer=control_actions['steering'],
+            throttle=control_actions['throttle'],
+            brake=control_actions['brake'],
+            hand_brake=False,
+            manual_gear_shift=False
+        )
+        print_blue("Control: ", control)
+        
         self.world.player.apply_control(control)
+        
+        #calculate errors
+        error_dict = self.mpc.calculate_errors(mpc_state, verbose=True)
         
         #record control signals for plotting
         self.yaw.append(self.world.player.get_transform().rotation.yaw)
         self.throttle_brake.append(control.throttle - control.brake)
         self.steer.append(control.steer)
         self.speed.append(speed)
+        
         self.position.append(self.world.player.get_location())
-        self.vel_target.append(self.pid.longitudinal_controller.target_speed)
-        self.pos_target.append(self.pid.lateral_controller.target_location)
-        self.lon_error.append(self.pid.longitudinal_controller.error)
-        self.lat_error.append(self.pid.lateral_controller.error)
+        self.vel_target.append(error_dict['velocity_target'])
+        self.pos_target.append(error_dict['pos_target'])
+        self.lon_error.append(error_dict['velocity_error'])
+        self.lat_error.append(error_dict['lateral_error'])
         self.time.append(timestamp.elapsed_seconds - self.first_timestamp.elapsed_seconds)
         
         # #print control signals, errors and values for debugging
@@ -395,6 +402,16 @@ class Simulation:
             self.potential_field.plot_field()
             self.autoencoder.compare(pf, num_plots=1)
             input("Press Enter to continue")
+            
+        #plot the predicted trajectory using carla modules
+        for elt in predictions:
+            self.world.world.debug.draw_point(
+                carla.Location(x=elt['x'], y=elt['y'], z=1),
+                size=0.1,
+                color=carla.Color(0, 0, 255),
+                life_time=0.1,
+            )
+            
             
         return 1
     
@@ -452,9 +469,9 @@ class Simulation:
         """Method for running the simulation"""
         self.init_game()
         while self.episode_counter < self.episode_limit:
-            while (self.frame_counter < self.frame_limit) and not self.pid.done:
+            while (self.frame_counter < self.frame_limit) and not self.mpc.is_done():
                 if self.frame_counter % 100 == 0:
-                    verbose = True
+                    verbose = False
                 self.game_step(verbose=verbose)
                 self.frame_counter += 1
             self.plot_results()
