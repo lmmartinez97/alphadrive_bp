@@ -89,7 +89,6 @@ class Simulation:
             1: 4, #introduce a one lane offset to the right
             2: -4 #introduce a one lane offset to the left
         }
-        self.smooth_frames = self.decision_period_seconds / self.simulation_period
 
         #record variables for plotting
         self.yaw = []
@@ -129,7 +128,7 @@ class Simulation:
         # initialize hud and world
         self.hud = HUD(self.args.width, self.args.height, text=__doc__)
         print_green("Created hud")
-        self.world = World(self.sim_world, self.hud, self.args)
+        self.world = World(self.sim_world, self.hud, self.args, self.simulation_period)
         print_green("Created world instance")
         
         #load autoencoder
@@ -164,9 +163,21 @@ class Simulation:
             'max_steering_increment': 1,
             'max_integral_threshold': None,
         }
+        
+        self.stanley_params = {
+            'Ke': 0.8,
+            'Kv': 1,
+            'Kr': 0.5,
+            'max_steering': 1.22,
+            'vehicle_length': 2.7,
+            'dt': self.world.delta_seconds,
+        }
+        
+        if 0:
+            self.pid = CarController(longitudinal_params=self.longitudinal_params, lateral_params=self.lateral_params, reference=None, lateral_controller_type="PID")
+        else:
+            self.pid = CarController(longitudinal_params=self.longitudinal_params, lateral_params=self.stanley_params, reference=None, lateral_controller_type="Stanley")
     
-        self.pid = CarController(longitudinal_params=self.longitudinal_params, lateral_params=self.lateral_params, reference=None)
-
         self.controller = KeyboardControl(self.world)
         self.clock = pygame.time.Clock()
 
@@ -175,7 +186,7 @@ class Simulation:
         self.world.restart(self.args)
     
         self.agent_type = self.agents_dict[self.args.behavior]
-        self.agent_type.max_speed = 35
+        self.agent_type.max_speed = 50
         #hand over control of npcs to traffic manager
         self.traffic_manager.set_synchronous_mode(True)
         for vehicle in self.world.npcs:
@@ -190,8 +201,7 @@ class Simulation:
         self.route = self.grp.trace_route(self.world.spawn_waypoint, self.world.dest_waypoint)
         self.reference = [[self.agent_type.max_speed, waypoint.transform] for waypoint, _ in self.route[1:]]
         self.pid.update_reference(self.reference)
-
-
+        
         self.world.dataframe = pd.DataFrame()
 
         self.prev_timestamp = self.world.world.get_snapshot().timestamp
@@ -337,18 +347,15 @@ class Simulation:
                     
         target_offset = self.available_actions[self.action]
         if self.frame_counter % self.decision_period == 0 and self.action is not None:
-            self.offset_step = (target_offset - self.pid.offset) / self.smooth_frames
             self.decision_counter += 1
+            print("Decision counter: ", self.decision_counter)
             if self.decision_counter % 15 == 0:
                 print("Toggling action")
                 self.action = 0 if self.action == 2 else 2
                 print("New action: ", self.action)
-                
-        if self.offset_step != 0:
-            new_offset = self.pid.offset + self.offset_step
-            self.pid.set_offset(new_offset)
-            if abs(new_offset - target_offset) < abs(self.offset_step):
-                self.offset_step = 0
+                target_offset = self.available_actions[self.action]
+                self.pid.set_offset(target_offset)
+
 
         self.world.record_frame_state(frame_number=self.frame_counter)
         self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
@@ -440,7 +447,7 @@ class Simulation:
         # Position figure
         plt.figure(figsize=figsize)
         plt.plot([pos.x for pos in self.position], [pos.y for pos in self.position], label="Position", linewidth=width)
-        plt.plot([pos.x for pos in self.pos_target], [pos.y for pos in self.pos_target], label="Target Position", linewidth=width)
+        plt.scatter([pos.x for pos in self.pos_target], [pos.y for pos in self.pos_target], label="Target Position", linewidth=width)
         plt.title("Position")
         plt.xlabel("X")
         plt.ylabel("Y")
@@ -454,7 +461,7 @@ class Simulation:
         while self.episode_counter < self.episode_limit:
             while (self.frame_counter < self.frame_limit) and not self.pid.done:
                 if self.frame_counter % 100 == 0:
-                    verbose = True
+                    verbose = False
                 self.game_step(verbose=verbose)
                 self.frame_counter += 1
             self.plot_results()

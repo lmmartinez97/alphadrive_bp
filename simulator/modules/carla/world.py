@@ -58,11 +58,11 @@ def find_weather_presets():
 class World(object):
     """Class representing the surrounding environment"""
 
-    def __init__(self, carla_world, hud, args):
+    def __init__(self, carla_world, hud, args, simulation_period):
         """Constructor method"""
         self._args = args
         self.world = carla_world
-        self.delta_seconds = 0.1
+        self.delta_seconds = simulation_period
 
         try:
             self.map = self.world.get_map()

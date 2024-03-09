@@ -132,7 +132,7 @@ class LateralController(PIDController):
     """
     def __init__(self, params):
         super().__init__(params)
-        self.max_steering = params.get('max_steering', 1)
+        self.max_steering = params.get('max_steering', 1.22)
         self.max_steer_increment = params.get('max_steer_increment', 1)
         self.distance_threshold = params.get('distance_threshold', 2)
         self.error = 0
@@ -195,7 +195,99 @@ class LateralController(PIDController):
         # print("Action: ", self.action)
         # print()
         return self.action
+    
+class LateralControllerStanley:
+    """
+    Class for Stanley lateral controller.
 
+    Args:
+        params (dict): Dictionary containing lateral controller parameters.
+            'Ke' : control gain for cross-track error
+            'Kv' : offset value for velocity in steering angle calculation
+            'Kr' : control gain for yaw rate error
+            'max_steering' : maximum steering angle
+            'vehicle_length' : wheelbase of the vehicle
+            'dt' : timestep
+            
+    Attributes:
+        Ke (float): Control gain for cross-track error.
+        Kv (float): Offset value for velocity in steering angle calculation.
+        Kr (float): Control gain for yaw rate error.
+        max_steering (float): Maximum steering angle.
+        vehicle_length (float): Wheelbase of the vehicle.
+        dt (float): Timestep.
+        prev_steering (float): The previous steering angle.
+        prev_yaw_vehicle (float): The previous yaw angle of the vehicle.
+        prev_yaw_path (float): The previous yaw angle of the path.
+    """
+    def __init__(self, params):
+        self.Ke = params.get('Ke', 1)
+        self.Kv = params.get('Kv', 1e-5)
+        self.Kr = params.get('Kr', 1)
+        self.max_steering = params.get('max_steering', 1.22)
+        self.vehicle_length = params.get('vehicle_length', 1)
+        self.dt = params.get('dt', 0.05)
+        self.prev_steering = 0 
+        self.prev_yaw_vehicle = None
+        self.prev_yaw_path = None
+
+    def saturation(self, steering_angle):
+        """
+        Applies saturation to the steering angle.
+
+        Args:
+            steering_angle (float): The steering angle.
+
+        Returns:
+            float: The saturated steering angle.
+        """
+        steering_angle = np.clip(steering_angle, -self.max_steering, self.max_steering)
+        steering_angle = np.clip(steering_angle, self.prev_steering - self.max_steering, self.prev_steering + self.max_steering)
+        self.prev_steering = steering_angle
+        return steering_angle
+
+    def run_step(self, target_location, next_target_location, current_transform, current_speed):
+        current_location = current_transform.location
+        
+        #calculate yaw error
+        yaw_path = np.arctan2(next_target_location.y - target_location.y, next_target_location.x - target_location.x)
+        yaw_diff = yaw_path - np.deg2rad(current_transform.rotation.yaw)
+        yaw_diff = np.arctan2(np.sin(yaw_diff), np.cos(yaw_diff))  # normalize to [-pi, pi]
+
+        #calculate cross track error
+        dx = target_location.x - current_location.x
+        dy = target_location.y - current_location.y
+        cross_track_error = np.hypot(dx, dy)
+        
+        #determine if cross track error is positive or negative
+        yaw_cross_track = np.arctan2(dy, dx)
+        yaw_path2ct = yaw_path - yaw_cross_track
+        yaw_path2ct = np.arctan2(np.sin(yaw_path2ct), np.cos(yaw_path2ct)) # normalize to [-pi, pi]
+        if yaw_path2ct > 0:
+            cross_track_error = -1*np.abs(cross_track_error)
+        else:
+            cross_track_error = np.abs(cross_track_error)
+            
+        self.error = cross_track_error
+        self.target_location = target_location
+        
+        #calculate yaw rate for trajectory and vehicle
+        if self.prev_yaw_path is None:
+            yaw_rate_diff = 0
+        else:
+            yaw_path_rate = (yaw_path - self.prev_yaw_path) / self.dt
+            yaw_vehicle_rate = (np.deg2rad(current_transform.rotation.yaw) - self.prev_yaw_vehicle) / self.dt
+            yaw_rate_diff = yaw_path_rate - yaw_vehicle_rate
+            
+        self.prev_yaw_path = yaw_path
+        self.prev_yaw_vehicle = np.deg2rad(current_transform.rotation.yaw)
+
+        yaw_diff_crosstrack = np.arctan(self.Ke * cross_track_error / (current_speed + self.Kv))  # add a small number to avoid division by zero
+        steering_angle = yaw_diff + yaw_diff_crosstrack + self.Kr * yaw_rate_diff
+        steering_angle = self.saturation(steering_angle)
+
+        return steering_angle
+    
 class CarController:
     """
     Class for controlling a car using longitudinal and lateral controllers.
@@ -213,12 +305,20 @@ class CarController:
         max_throttle (float): Maximum throttle command.
         max_brake (float): Maximum brake command.
         
-    Lateral parameters:
+    Lateral parameters for PID:
         Kp (float): Proportional gain.
         Ki (float): Integral gain.
         Kd (float): Derivative gain.
         dt (float): Timestep.
         max_steering (float): Maximum steering command.
+        
+    Lateral parameters for Stanley:
+        Ke (float): Control gain for crosstrack error.
+        Kv (float): Offset value for velocity in steering angle calculation.
+        Kr (float): Control gain for yaw rate error.
+        max_steering (float): Maximum steering angle.
+        vehicle_length (float): Wheelbase of the vehicle.
+        dt (float): Timestep.
     
     Example:
         >>> longitudinal_params = {
@@ -236,17 +336,32 @@ class CarController:
         ...     'dt': 0.03,
         ...     'max_steering': 0.8
         ... }
+        >>> lateral_params = {
+        ...     'Ke': 1.0,
+        ...     'Kv': 0.1,
+        ...     'Kr': 0.5,
+        ...     'max_steering': 0.8,
+        ...     'vehicle_length': 1.5,
+        ...     'dt': 0.03
+        ... }
         >>> reference = [
         ...     (10, carla.Location(x=0, y=0)),
         ...     (10, carla.Location(x=10, y=0)),
         ...     (10, carla.Location(x=10, y=10))
         ... ]
-        >>> controller = CarController(longitudinal_params, lateral_params, reference)
+        >>> controller = CarController(longitudinal_params, lateral_params, reference, lateral_controller_type="Stanley")
     """
-    def __init__(self, longitudinal_params, lateral_params, reference):
+    def __init__(self, longitudinal_params, lateral_params, reference, lateral_controller_type="PID"):
         self.longitudinal_controller = LongitudinalController(longitudinal_params)
-        self.lateral_controller = LateralController(lateral_params)
+        self.lateral_controller_type = lateral_controller_type
+        if lateral_controller_type == "PID":
+            self.lateral_controller = LateralController(lateral_params)
+        elif lateral_controller_type == "Stanley":
+            self.lateral_controller = LateralControllerStanley(lateral_params)
+        else:
+            raise ValueError("Invalid lateral controller type")
         self.reference = reference
+        self.steering_conversion_factor = 1.22
         self.current_index = 0
         self.done = False
         self.offset = 0
@@ -266,6 +381,19 @@ class CarController:
         self.reference = reference
         self.current_index = 0
         self.done = False
+        
+    def apply_offset_to_transform(self, target_transform):
+        target_location = target_transform.location
+        if self.offset != 0:
+            # Displace the wp to the side
+            r_vec = target_transform.get_right_vector()
+            target_location_displaced = target_location + carla.Location(x=self.offset*r_vec.x,
+                                                         y=self.offset*r_vec.y)
+            #print("Displaced target location: ", target_location_displaced, "from: ", target_location, "offset: ", self.offset, "r_vec: ", r_vec)
+        else:
+            target_location_displaced = target_location
+            
+        return target_location_displaced
 
     def run_step(self, current_speed, current_transform):
         """
@@ -284,19 +412,12 @@ class CarController:
         current_location = current_transform.location
         current_yaw = np.deg2rad(current_transform.rotation.yaw)
         target_location = target_transform.location
-        if self.offset != 0:
-            # Displace the wp to the side
-            r_vec = target_transform.get_right_vector()
-            target_location_displaced = target_location + carla.Location(x=self.offset*r_vec.x,
-                                                         y=self.offset*r_vec.y)
-            #print("Displaced target location: ", target_location_displaced, "from: ", target_location, "offset: ", self.offset, "r_vec: ", r_vec)
-        else:
-            target_location_displaced = target_location
-            
+        target_location_displaced = self.apply_offset_to_transform(target_transform)
         #check if we need to advance the reference
         v1 = np.array([target_location.x - current_location.x, target_location.y - current_location.y])
-        if self.current_index < len(self.reference) - 1:
-            next_target_location = self.reference[self.current_index + 1][1].location
+        if self.current_index < len(self.reference) - 2:
+            next_target_transform = self.reference[self.current_index + 1][1]
+            next_target_location = self.apply_offset_to_transform(next_target_transform)
             v2 = np.array([next_target_location.x - target_location.x, next_target_location.y - target_location.y])
             dot_product = np.dot(v1, v2)
             # print("Current location:", current_location)
@@ -310,9 +431,14 @@ class CarController:
                 self.current_index += 1
         else:
             self.done = True
+            next_target_transform = self.reference[-1][1]
+            next_target_location = self.apply_offset_to_transform(next_target_transform)
 
         throttle_brake = self.longitudinal_controller.run_step(target_speed, current_speed)
-        steering = self.lateral_controller.run_step(target_location=target_location_displaced, current_transform= current_transform)
+        if self.lateral_controller_type == "Stanley":
+            steering = self.lateral_controller.run_step(target_location=target_location_displaced, next_target_location=next_target_location, current_transform= current_transform, current_speed=current_speed)/self.steering_conversion_factor
+        else:
+            steering = self.lateral_controller.run_step(target_location=target_location_displaced, current_transform= current_transform)
         throttle = max(throttle_brake, 0)
         brake = max(-throttle_brake, 0)
         
