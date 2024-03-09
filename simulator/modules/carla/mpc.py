@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 import numpy as np
 from scipy.optimize import minimize
 from rich import print
@@ -72,11 +72,16 @@ class MPCController:
         self.dt = parameters.get('dt', 0.1)  # Time step for integration (seconds)
         self.prediction_horizon = parameters.get('prediction_horizon', 10)  # Prediction horizon (number of time steps)
         self.max_steering_rate = parameters.get('max_steering_rate', 0.05)  # Maximum rate of change of steering angle per time step
+        self.max_pedal_rate = parameters.get('max_pedal_rate', 0.1)  # Maximum rate of change of pedal position per time step
         
         # Cost function parameters
         self.tracking_cost_weight = parameters.get('tracking_cost_weight', 1.0)  # Weight for tracking cost
         self.velocity_cost_weight = parameters.get('velocity_cost_weight', 1.0)  # Weight for velocity cost
-        
+        self.yaw_cost_weight = parameters.get('yaw_cost_weight', 1.0)  # Weight for yaw cost
+        self.steering_rate_cost = parameters.get('steering_rate_cost_weight', 1.0)  # Weight for steering rate cost
+        self.pedal_rate_cost = parameters.get('pedal_rate_cost_weight', 1.0)  # Weight for pedal rate cost
+        self.exponential_decay = parameters.get('exponential_decay_rate', None) #decay factor for the cost function
+
         self.reference = []  # Reference trajectory
         self.prev_control = [0, 0]  # Previous control inputs steering, pedal - initalized for optimization process
         
@@ -84,8 +89,20 @@ class MPCController:
         self.offset = 0.0
         
         self.last_tracked_index = 0  # Index of the last tracked point in the reference trajectory
+
+        #Define optimization bounds
+        self.bounds_steer = (-0.75, 0.75)
+        self.bounds_pedal = (-0.5, 0.75)
+        self.bounds = [self.bounds_steer, self.bounds_pedal] * self.prediction_horizon
+        
+        #Define optimization method
+        self.method = 'SLSQP'
+        self.method_opts = {'dict_config':{'maxiter': 1000, 'disp': True, 'ftol': 1e-6, 'eps': np.deg2rad(.5)}, 
+                            'jacobian_type': '2-point'}
         
         np.set_printoptions(precision=6, suppress=True)
+        
+        self.steer_conversion = 1.22 #a value of 1 in carla.VehicleControl equates to 1.22 radians at the wheels
         
         print_blue("MPC controller initialized with params:")
         [print_green(f"{k}: {v}") for k, v in parameters.items()]
@@ -133,6 +150,7 @@ class MPCController:
             dict: Derivatives of state variables, containing [x_dot, y_dot, yaw_rate, velocity_dot].
         """
         # Calculate net longitudinal force
+        steer_angle = control['steering'] * self.steer_conversion
         throttle_pressure = control['pedal'] if control['pedal'] > 0 else 0
         brake_pressure = control['pedal'] if control['pedal'] < 0 else 0
         net_force = (self.max_acceleration * throttle_pressure + self.max_deceleration * brake_pressure)*self.mass
@@ -149,15 +167,122 @@ class MPCController:
         acceleration = (net_force + drag_force + weight_force) / self.mass  # Divide by mass to get acceleration
         
         # Calculate slip angle at the center of gravity
-        beta = np.arctan((self.a / (self.a + self.b)) * np.tan(control['steering']))
-        yaw_rate = state['velocity'] * np.sin(beta) / self.L
+        yaw_rate = state['velocity'] * np.tan(steer_angle) / self.L
         
         # Calculate derivatives of position
         x_dot = state['velocity'] * np.cos(state['yaw'])
         y_dot = state['velocity'] * np.sin(state['yaw'])
         
         return {'x_dot': x_dot, 'y_dot': y_dot, 'yaw_rate': yaw_rate, 'velocity_dot': acceleration}
-
+    
+    def calculate_velocity_cost(self, closest_index: int, state_trajectory: Dict, exponential_decay: float = None) -> float:
+        """
+        Calculate the velocity cost for the predicted trajectory.
+        
+        If exponential decay is true, a decay factor is applied to mitigate the important of distant points in the trajectory.
+        """
+        if exponential_decay:
+            decay_factor = exponential_decay
+        else:
+            decay_factor = 1
+        cost = 0
+        for i, state in enumerate(state_trajectory):
+            if closest_index + i < len(self.reference):
+                ref_state = self.reference[closest_index + i]
+                cost += np.linalg.norm([state['velocity'] - ref_state['velocity']]) * decay_factor**i
+        return cost
+    
+    def calculate_yaw_cost(self, closest_index: int, state_trajectory: Dict, exponential_decay: float = None) -> float:
+        """
+        Calculate the yaw cost for the predicted trajectory.
+        
+        If exponential decay is true, a decay factor is applied to mitigate the important of distant points in the trajectory.
+        """
+        if exponential_decay:
+            decay_factor = exponential_decay
+        else:
+            decay_factor = 1
+            
+        cost = 0
+        for i, state in enumerate(state_trajectory):
+            if closest_index + i < len(self.reference):
+                ref_state = self.reference[closest_index + i]
+                angle_error = np.abs(state['yaw'] - ref_state['yaw'])
+                cost += angle_error * decay_factor**i
+                
+        return cost
+    
+    def calculate_tracking_cost(self, closest_index: int, state_trajectory: Dict, exponential_decay: float = None, verbose: bool = False) -> float:
+        """
+        Calculate the tracking cost for the predicted trajectory.
+        
+        If exponential decay is true, a decay factor is applied to mitigate the important of distant points in the trajectory.
+        """
+        if exponential_decay:
+            decay_factor = exponential_decay
+        else:
+            decay_factor = 1
+            
+        cost = 0
+        for i, state in enumerate(state_trajectory):
+            if closest_index + i < len(self.reference)-1:
+                ref_state = self.reference[closest_index + i]
+                next_ref_state = self.reference[closest_index + i + 1]
+            else: #if we are at the end of the reference trajectory, use the last two reference points
+                ref_state = self.reference[-2]
+                next_ref_state = self.reference[-1]
+            #calculate distance between the vehicle and the line that goes through the two reference points
+            p1 = np.array([ref_state['x'], ref_state['y']])
+            p2 = np.array([next_ref_state['x'], next_ref_state['y']])
+            p3 = np.array([state['x'], state['y']])
+            distance = np.abs(np.linalg.norm(np.cross(p2 - p1, p1 - p3)) / np.linalg.norm(p2 - p1))
+            if verbose:
+                print(f"Distance to line {i}: {distance}")
+            cost += distance * decay_factor**i
+        return cost
+    
+    def calculate_control_rate_cost(self, control_sequence: List) -> float:
+        """
+        Calculate the control rate cost for the predicted trajectory.
+        """
+        cost = 0
+        for i in range(len(control_sequence) - 1):
+            cost += np.abs(control_sequence[i] - control_sequence[i + 1])
+        return cost
+    
+    def calculate_state_trajectory(self, current_state: Dict, control_sequence: List) -> Dict:
+        # Calculate state trajectory using model and control inputs
+        state_trajectory = [current_state]
+        for i in range(self.prediction_horizon):
+            control = {'steering': control_sequence[i, 0], 'pedal': control_sequence[i, 1]}
+            derivatives = self.model(state_trajectory[-1], control)
+            next_state = self.calculate_next_state(state_trajectory[-1], derivatives, self.dt)
+            state_trajectory.append(next_state)
+            
+        return state_trajectory
+    
+    def calculate_total_cost(self, control_sequence, verbose = False) -> float:
+        """
+        Calculate the total cost for the predicted trajectory.
+        
+        If exponential decay is true, a decay factor is applied to mitigate the important of distant points in the trajectory.
+        """
+        control_sequence = np.reshape(control_sequence, (-1, 2))
+        state_trajectory = self.calculate_state_trajectory(self.current_state, control_sequence=control_sequence)
+        tracking_cost = self.calculate_tracking_cost(self.closest_index, state_trajectory, self.exponential_decay, verbose=verbose)
+        velocity_cost = self.calculate_velocity_cost(self.closest_index, state_trajectory, self.exponential_decay)
+        yaw_cost = self.calculate_yaw_cost(self.closest_index, state_trajectory, self.exponential_decay)
+        steering_rate_cost = self.calculate_control_rate_cost(control_sequence[:, 0])
+        pedal_rate_cost = self.calculate_control_rate_cost(control_sequence[:, 1])
+        cost = self.tracking_cost_weight * tracking_cost + self.velocity_cost_weight * velocity_cost + self.yaw_cost_weight * yaw_cost + self.steering_rate_cost * steering_rate_cost + self.pedal_rate_cost * pedal_rate_cost
+        if verbose:
+            print("Tracking cost: ", tracking_cost)
+            print("Velocity cost: ", velocity_cost)
+            print("Yaw cost: ", yaw_cost)
+            print("Steering rate cost: ", steering_rate_cost)
+            print("Pedal rate cost: ", pedal_rate_cost)
+            print("Total cost: ", cost)
+        return cost
 
     def optimize_control(self, current_state):
         """
@@ -183,69 +308,57 @@ class MPCController:
             reconstructed states: list of states reconstructed using the model and control inputs
         """
         # Find the index of the closest point in the reference trajectory
-        closest_index = self.find_closest_index(current_state)
-        print("Closest index: ", closest_index)
+        self.closest_index = self.find_closest_index(current_state)
+        print("Closest index: ", self.closest_index)
         # Update last tracked index for faster search next time
-        self.last_tracked_index = closest_index
-        local_reference = self.reference[closest_index:closest_index + self.prediction_horizon + 1]
-                
-        def cost_function(control_sequence):
-            # Reshape the control sequence into a 2D array
-            control_sequence = np.reshape(control_sequence, (-1, 2))
-
-            # Calculate state trajectory using model and control inputs
-            state_trajectory = [current_state]
-            for i in range(self.prediction_horizon):
-                control = {'steering': control_sequence[i, 0], 'pedal': control_sequence[i, 1]}
-                derivatives = self.model(state_trajectory[-1], control)
-                next_state = self.calculate_next_state(state_trajectory[-1], derivatives, self.dt)
-                state_trajectory.append(next_state)
-                       
-            # Calculate cost based on deviation from reference trajectory and velocity deviation
-            cost = 0
-            for i, state in enumerate(state_trajectory):
-                if closest_index + i < len(self.reference):
-                    ref_state = self.reference[closest_index + i]
-                    cost += self.tracking_cost_weight * np.abs(state['yaw'] - ref_state['yaw'])
-                    cost += self.velocity_cost_weight * np.linalg.norm([state['velocity'] - ref_state['velocity']])
-
-            return cost
-
-        # Initial guess for control inputs
-        initial_guess = np.tile([0, 0], (self.prediction_horizon, 1)).flatten()
-
-        #Define optimization constraints
-        constraints = []
-        for i in range(self.prediction_horizon):
-            constraints.extend([
-                {'type': 'ineq', 'fun': lambda x: x[i*2 + 1] - 1},  # pedal <= 1
-                {'type': 'ineq', 'fun': lambda x: -x[i*2 + 1] - 1},  # pedal >= -1
-                {'type': 'ineq', 'fun': lambda x: x[i*2] - 1},  # steering <= 1
-                {'type': 'ineq', 'fun': lambda x: -x[i*2] - 1},  # steering >= -1
-                {'type': 'ineq', 'fun': lambda x: x[i*2] - (self.prev_control[0] + self.max_steering_rate)},  # steering change rate <= 0.05
-                {'type': 'ineq', 'fun': lambda x: -x[i*2] + (self.prev_control[0] + self.max_steering_rate)},  # steering change rate >= -0.05  
-            ])
-            
-        bounds = [(-1, 1) for _ in range(self.prediction_horizon * 2)]
+        self.last_tracked_index = self.closest_index
+                        # Initial guess for control inputs
+        initial_guess = np.tile(self.prev_control, (self.prediction_horizon, 1)).flatten()
+        
+        self.current_state = current_state
+        
+        # self.constraints = []
+        # for i in range(self.prediction_horizon):
+        #     self.constraints.extend([
+        #         # {'type': 'ineq', 'fun': lambda x: x[i*2 + 1] - 1},  # pedal <= 1
+        #         # {'type': 'ineq', 'fun': lambda x: -x[i*2 + 1] - 1},  # pedal >= -1
+        #         # {'type': 'ineq', 'fun': lambda x: x[i*2] - 1},  # steering <= 1
+        #         # {'type': 'ineq', 'fun': lambda x: -x[i*2] - 1},  # steering >= -1
+        #         {'type': 'ineq', 'fun': lambda x: self.max_steering_rate - np.abs(x[i*2] - self.prev_control[0])},  # absolute steering change rate <= max_steering_rate
+        #         {'type': 'ineq', 'fun': lambda x: self.max_pedal_rate - np.abs(x[i*2 + 1] - self.prev_control[1])},  # absolute pedal change rate <= max_pedal_rate
+        #         ])
 
         # Optimize control inputs
-        result = minimize(cost_function, initial_guess, method='SLSQP', constraints=constraints, bounds=bounds,
-                          options={'maxiter': 100, 'ftol': 1e-1, 'disp': True})
+        result = minimize(self.calculate_total_cost, 
+                          x0=initial_guess, 
+                        #   constraints=self.constraints, 
+                          bounds=self.bounds,
+                          method='SLSQP',
+                          options=self.method_opts['dict_config'],
+                          jac=self.method_opts['jacobian_type'])
 
         # Reshape the result into a 2D array and return the first row
         optimized_control_sequence = np.reshape(result.x, (-1, 2))
+        print("Optimized control sequence: ", optimized_control_sequence)
+        self.prev_control = optimized_control_sequence[0]
+        self.calculate_total_cost(optimized_control_sequence, verbose=True)
         #reconstructed states
-        reconstructed_states = [current_state]
-        for i in range(self.prediction_horizon):
-            control = {'steering': optimized_control_sequence[i, 0], 'pedal': optimized_control_sequence[i, 1]}
-            derivatives = self.model(reconstructed_states[-1], control)
-            next_state = self.calculate_next_state(reconstructed_states[-1], derivatives, self.dt)
-            reconstructed_states.append(next_state)
-            
-        print_green("Optimized control sequence: ", optimized_control_sequence[0])
-        return_dict = {'steering': optimized_control_sequence[0, 0],
-                       'throttle': optimized_control_sequence[0, 1] if optimized_control_sequence[0, 1] > 0 else 0,
-                       'brake': -optimized_control_sequence[0, 1] if optimized_control_sequence[0, 1] < 0 else 0}         
+        reconstructed_states = self.calculate_state_trajectory(current_state, optimized_control_sequence)
+        for state in reconstructed_states:
+            print(f"State: {state}")
+        
+        #if the predicted velocity of the next iteration is zero, control was unsuccessful, so we go straigt with throttle = 0.3
+        if reconstructed_states[0]['velocity'] < 1:
+            print("Control failed, going straight")
+            return_dict = {'steering': 0,
+                            'throttle': 0.3,
+                            'brake': 0}
+
+        else:
+            print_green("Optimized control sequence: ", optimized_control_sequence[0])
+            return_dict = {'steering': optimized_control_sequence[0, 0],
+                        'throttle': optimized_control_sequence[0, 1] if optimized_control_sequence[0, 1] > 0 else 0,
+                        'brake': -optimized_control_sequence[0, 1] if optimized_control_sequence[0, 1] < 0 else 0}         
         
         return return_dict, reconstructed_states
 
@@ -268,6 +381,9 @@ class MPCController:
             'velocity': current_state['velocity'] + derivatives['velocity_dot'] * dt,
             'pitch': current_state['pitch'],#pitch is not changing for now
         }
+        #normalize yaw
+        next_state['yaw'] = (next_state['yaw'] + np.pi) % (2 * np.pi) - np.pi
+        
         return next_state
 
     def update_reference(self, reference_trajectory):
@@ -305,7 +421,7 @@ class MPCController:
             offset (float): The offset to be added to the reference trajectory.
         """
         self.offset = offset
-        for ref in self.reference:
+        for ref in self.reference[self.last_tracked_index:]:
             # Calculate the offset in the x and y directions based on the yaw angle
             dx = offset * np.cos(ref['yaw'] + np.pi / 2)
             dy = offset * np.sin(ref['yaw'] + np.pi / 2)

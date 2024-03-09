@@ -159,9 +159,13 @@ class Simulation:
             'gravity': 9.81,
             'dt': self.simulation_period,
             'prediction_horizon': 4,
-            'max_steering_rate': 0.05,
+            'max_steering_rate': 0.1,
             'tracking_cost_weight': 1,
-            'velocity_cost_weight': 5
+            'velocity_cost_weight': 1,
+            'yaw_cost_weight': 1,
+            'steering_rate_cost_weight': 1,
+            'pedal_rate_cost_weight': 1,
+            'exponential_decay_rate': 0.6,
         }
         self.mpc = MPCController(parameters)
         
@@ -184,7 +188,10 @@ class Simulation:
             
         # Set the agent destination
         self.route = self.grp.trace_route(self.world.spawn_waypoint, self.world.dest_waypoint)
-        self.reference = [[[waypoint.transform.location.x, waypoint.transform.location.y, waypoint.transform.location.z], self.agent_type.max_speed] for waypoint, _ in self.route]
+        self.reference = [[[waypoint.transform.location.x, 
+                            waypoint.transform.location.y, 
+                            waypoint.transform.location.z], 
+                           self.agent_type.max_speed] for waypoint, _ in self.route[1:]]
         self.mpc.update_reference(self.reference)
 
         self.world.dataframe = pd.DataFrame()
@@ -366,7 +373,7 @@ class Simulation:
         self.world.player.apply_control(control)
         
         #calculate errors
-        error_dict = self.mpc.calculate_errors(mpc_state, verbose=True)
+        error_dict = self.mpc.calculate_errors(mpc_state, verbose=False)
         
         #record control signals for plotting
         self.yaw.append(self.world.player.get_transform().rotation.yaw)
