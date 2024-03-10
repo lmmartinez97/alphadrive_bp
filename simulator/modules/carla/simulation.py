@@ -88,7 +88,6 @@ class Simulation:
             1: 4, #introduce a one lane offset to the right
             2: -4 #introduce a one lane offset to the left
         }
-        self.smooth_frames = self.decision_period_seconds / self.simulation_period
 
         #record variables for plotting
         self.yaw = []
@@ -134,23 +133,24 @@ class Simulation:
         self.world = World(self.sim_world, self.hud, self.args)
         print_green("Created world instance")
         
-        #load autoencoder
-        self.autoencoder = load_model(model_name= "autoencoder_1" ,directory="../scene_representation/training/saved_models")
+        # #load autoencoder -- remove these features for now until mpc works
+        # self.autoencoder = load_model(model_name= "autoencoder_1" ,directory="../scene_representation/training/saved_models")
+         # #Initialize Potential Field -- remove these features for now until mpc works
+        # rx = 50 # horizontal semiaxis of ellipse to consider as ROI
+        # ry = 6 # vertical semiaxis of ellipse to consider as ROI
+        # sx = 0.5 # step size in x direction
+        # sy = 0.1 # step size in y direction
+        # self.potential_field = PotentialField(radius_x = rx, radius_y = ry, step_x = sx, step_y = sy)
+ 
         #Initialize GlobalRoutePlanner
         self.grp = GlobalRoutePlanner(wmap=self.world.map, sampling_resolution=self.simulation_period * self.agent_type.max_speed / 3.6) 
-        #Initialize Potential Field
-        rx = 50 # horizontal semiaxis of ellipse to consider as ROI
-        ry = 6 # vertical semiaxis of ellipse to consider as ROI
-        sx = 0.5 # step size in x direction
-        sy = 0.1 # step size in y direction
-        self.potential_field = PotentialField(radius_x = rx, radius_y = ry, step_x = sx, step_y = sy)
-        
+
         #initialize MPC controller
         parameters = {
             'mass': 1500,
-            'L': 2.7,
-            'a': 1.2,
-            'b': 1.5,
+            'L': 2.7, #wheelbase
+            'a': 1.2, #distance from CoG to front axle
+            'b': 1.5, #distance from CoG to rear axle
             'frontal_area': 2.4,
             'drag_coefficient': 0.24,
             'max_acceleration': 2.5,
@@ -207,7 +207,7 @@ class Simulation:
             )
         self.world.player.set_target_velocity(carla.Vector3D(x=self.agent_type.max_speed/3.6, y=0, z=0))
         self.world.world.tick()
-        self.world.world.tick()
+        self.world.world.tick() #tick twice to apply velocity changes
         # Clear record variables
         self.yaw.clear()
         self.throttle_brake.clear()
@@ -221,106 +221,7 @@ class Simulation:
         self.time.clear()
         
         self.action = 0
-        
-    def mcts_step(self, verbose = False, recording = False, action = 0):
-        self.action = action
-        #Discern action and get target offset
-        target_offset = self.available_actions[self.action]
-        self.offset_step = (target_offset - self.pid.offset) / self.smooth_frames
 
-        for _ in range(self.decision_period):
-            #Calculate current trajectory offset
-            if self.offset_step != 0:
-                new_offset = self.pid.offset + self.offset_step
-                self.pid.set_offset(new_offset)
-                if abs(new_offset - target_offset) < abs(self.offset_step):
-                    self.offset_step = 0
-                
-            #Get ego vehicle variables and run PID controller
-            velocity = self.world.player.get_velocity()
-            speed = 3.6 * np.sqrt(velocity.x**2 + velocity.y**2)
-            transform = self.world.player.get_transform()
-            control = self.pid.run_step(current_speed=speed, current_transform=transform)
-            control.manual_gear_shift = False
-            self.world.player.apply_control(control)
-            
-            #record control signals for plotting
-            self.yaw.append(self.world.player.get_transform().rotation.yaw)
-            self.throttle_brake.append(control.throttle - control.brake)
-            self.steer.append(control.steer)
-            self.speed.append(speed)
-            self.position.append(self.world.player.get_location())
-            self.vel_target.append(self.pid.longitudinal_controller.target_speed)
-            self.pos_target.append(self.pid.lateral_controller.target_location)
-            self.lon_error.append(self.pid.longitudinal_controller.error)
-            self.lat_error.append(self.pid.lateral_controller.error)
-            self.time.append(prev_timestamp.elapsed_seconds - self.first_timestamp.elapsed_seconds)
-        
-            #Tick the clock to advance the simulation
-            self.clock.tick()
-            self.world.world.tick()
-            self.world.tick(self.clock, self.episode_counter, self.frame_counter)
-
-            prev_timestamp = self.world.world.get_snapshot().timestamp
-            self.frame_counter += 1
-
-        if self.display:
-            self.world.render(self.display)
-            pygame.display.flip()
-
-        self.potential_field.update(self.world.return_frame_history(frame_number=self.decision_counter, history_length=5))
-        pf = self.potential_field.calculate_field()
-        state = self.autoencoder.encode(pf).flatten()
-        
-        if recording: #if the simulation is being run from game step, NOT from MCTS search
-            self.world.record_frame_state(frame_number=self.decision_counter)
-            self.decision_counter += 1
-        
-        if 0:
-            print("State: ", state)
-            print("State len: ", len(state))
-            print("Frame: ", self.frame_counter)
-            print("Control action: ", control)
-            self.potential_field.plot_field()
-            self.autoencoder.compare(pf, num_plots=1)
-            input("Press Enter to continue")
-            
-        return state
-    
-    def is_terminal(self):
-        """
-        Method for checking if the current state is terminal
-        """
-        ret = False
-        if self.frame_counter >= self.frame_limit:
-            ret = True
-        if self.pid.done:
-            ret = True
-        if len(self.world.collision_sensor.get_collision_history()) > 0:
-            ret = True
-        
-        return ret
-    
-    def get_reward(self):
-        """
-        Method for getting the reward for the current state
-        """
-        reward = 0
-        if self.pid.done:
-            reward = 100
-        if len(self.world.collision_sensor.get_collision_history()) > 0:
-            reward = -100
-        return reward
-    
-    def get_state(self, decision_index):
-        """
-        Method for getting the state at the current decision index
-        """
-        self.world.record_frame_state(frame_number=decision_index)
-        self.potential_field.update(self.world.return_frame_history(frame_number=decision_index, history_length=5))
-        pf = self.potential_field.calculate_field()
-        state = self.autoencoder.encode(pf).flatten()
-        return state
     
     def game_step(self, verbose = False, recording = False):
         self.clock.tick()
@@ -336,7 +237,7 @@ class Simulation:
         if self.controller and self.controller.parse_events():
             return -1, -1, prev_timestamp
                     
-        target_offset = self.available_actions[self.action]
+        #block that toggles the action every 15 decision periods - as of now, 15 seconds. Just to test the controller accuracy.
         if self.frame_counter % self.decision_period == 0 and self.action is not None:
             self.decision_counter += 1
             if self.decision_counter % 15 == 0:
@@ -346,19 +247,19 @@ class Simulation:
                 self.mpc.set_offset(self.available_actions[self.action])
 
         self.world.record_frame_state(frame_number=self.frame_counter)
-        self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
-        pf = self.potential_field.calculate_field()
-        state = self.autoencoder.encode(pf).flatten()
+        # self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
+        # pf = self.potential_field.calculate_field()
+        # state = self.autoencoder.encode(pf).flatten()
         
         velocity = self.world.player.get_velocity()
-        speed = np.sqrt(velocity.x**2 + velocity.y**2)
+        speed = np.linalg.norm([velocity.x, velocity.y])
         transform = self.world.player.get_transform()
         mpc_state = {
             'x': transform.location.x,
             'y': transform.location.y,
             'yaw': transform.rotation.yaw,
             'velocity': speed,
-            'pitch': transform.rotation.pitch,
+            'pitch': transform.rotation.pitch, #used to calculate weight component in the direction of the vehicle
         }
         control_actions, predictions = self.mpc(state=mpc_state)
         control = carla.VehicleControl(
@@ -402,12 +303,12 @@ class Simulation:
         prev_timestamp = timestamp
 
         if verbose:
-            print("State: ", state)
-            print("State len: ", len(state))
+            # print("State: ", state)
+            # print("State len: ", len(state))
             print("Frame: ", self.frame_counter)
             print("Control action: ", control)
-            self.potential_field.plot_field()
-            self.autoencoder.compare(pf, num_plots=1)
+            # self.potential_field.plot_field()
+            # self.autoencoder.compare(pf, num_plots=1)
             input("Press Enter to continue")
             
         #plot the predicted trajectory using carla modules
@@ -416,7 +317,7 @@ class Simulation:
                 carla.Location(x=elt['x'], y=elt['y'], z=1),
                 size=0.1,
                 color=carla.Color(0, 0, 255),
-                life_time=0.1,
+                life_time=1,
             )
             
             
