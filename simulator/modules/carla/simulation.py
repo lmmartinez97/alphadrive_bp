@@ -190,12 +190,14 @@ class Simulation:
         #hand over control of npcs to traffic manager
         self.traffic_manager.set_synchronous_mode(True)
         for vehicle in self.world.npcs:
-            self.traffic_manager.auto_lane_change(vehicle, True)
-            self.traffic_manager.vehicle_percentage_speed_difference(vehicle, np.random.randint(-20, 20))
+            self.traffic_manager.auto_lane_change(vehicle, False)
+            self.traffic_manager.vehicle_percentage_speed_difference(vehicle, np.random.randint(-100, -50))
             self.traffic_manager.distance_to_leading_vehicle(vehicle, 5)
             self.traffic_manager.collision_detection(vehicle, self.world.player, False)
-            self.traffic_manager.ignore_lights_percentage(vehicle, 0)
+            self.traffic_manager.ignore_lights_percentage(vehicle, 0) #vehicle does not ignore lights
+            self.traffic_manager.ignore_vehicles_percentage(vehicle, 0) #vehicle does not ignore other vehicles
             vehicle.set_autopilot(True)
+            vehicle.set_target_velocity(carla.Vector3D(x=self.agent_type.max_speed/3.6, y=0, z=0)) #every vehicle starts at the same speed
             
         # Set the agent destination
         self.route = self.grp.trace_route(self.world.spawn_waypoint, self.world.dest_waypoint)
@@ -216,7 +218,7 @@ class Simulation:
             )
         self.world.player.set_target_velocity(carla.Vector3D(x=self.agent_type.max_speed/3.6, y=0, z=0))
         self.world.world.tick()
-        self.world.world.tick()
+        self.world.world.tick() #tick two times to set target velocity
         # Clear record variables
         self.yaw.clear()
         self.throttle_brake.clear()
@@ -233,17 +235,11 @@ class Simulation:
         
     def mcts_step(self, verbose = False, recording = False, action = 0):
         self.action = action
-        #Discern action and get target offset
+        #set pid offset to the action
         target_offset = self.available_actions[self.action]
-        self.offset_step = (target_offset - self.pid.offset) / self.smooth_frames
+        self.pid.set_offset(target_offset)
 
         for _ in range(self.decision_period):
-            #Calculate current trajectory offset
-            if self.offset_step != 0:
-                new_offset = self.pid.offset + self.offset_step
-                self.pid.set_offset(new_offset)
-                if abs(new_offset - target_offset) < abs(self.offset_step):
-                    self.offset_step = 0
                 
             #Get ego vehicle variables and run PID controller
             velocity = self.world.player.get_velocity()
@@ -281,7 +277,7 @@ class Simulation:
         pf = self.potential_field.calculate_field()
         state = self.autoencoder.encode(pf).flatten()
         
-        if recording: #if the simulation is being run from game step, NOT from MCTS search
+        if recording: #if the simulation is being run from aplhazero step, NOT from MCTS search
             self.world.record_frame_state(frame_number=self.decision_counter)
             self.decision_counter += 1
         

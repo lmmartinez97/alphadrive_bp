@@ -226,7 +226,7 @@ class World(object):
         # )
         self.dataframe_record.clear()
         self.spawn_ego_vehicle()
-        #self.spawn_npc_vehicles(self.npc_vehicles_num)
+        self.spawn_npc_vehicles(self.npc_vehicles_num)
         self.setup_sensors()
         print("Sensors set up")
         if args.static_camera:
