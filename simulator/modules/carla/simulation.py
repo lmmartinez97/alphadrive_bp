@@ -55,12 +55,12 @@ from .keyboard_control import KeyboardControl
 from .printers import print_blue, print_green, print_highlight, print_red
 from .world import World
 from .hud import HUD
-from .potential_field import PotentialField
+#from .potential_field import PotentialField
 from .mpc import MPCController
 from ..agents.navigation.global_route_planner import GlobalRoutePlanner
 from ..agents.navigation.behavior_types import Cautious, Normal, Aggressive
 
-from .autoencoder import load_model
+#from .autoencoder import load_model
 
 class Simulation:
   
