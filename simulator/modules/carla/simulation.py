@@ -259,7 +259,7 @@ class Simulation:
             self.pos_target.append(self.pid.lateral_controller.target_location)
             self.lon_error.append(self.pid.longitudinal_controller.error)
             self.lat_error.append(self.pid.lateral_controller.error)
-            self.time.append(prev_timestamp.elapsed_seconds - self.first_timestamp.elapsed_seconds)
+            self.time.append(self.prev_timestamp.elapsed_seconds - self.first_timestamp.elapsed_seconds)
         
             #Tick the clock to advance the simulation
             self.clock.tick()
@@ -272,25 +272,10 @@ class Simulation:
         if self.display:
             self.world.render(self.display)
             pygame.display.flip()
-
-        self.potential_field.update(self.world.return_frame_history(frame_number=self.decision_counter, history_length=5))
-        pf = self.potential_field.calculate_field()
-        state = self.autoencoder.encode(pf).flatten()
         
         if recording: #if the simulation is being run from aplhazero step, NOT from MCTS search
             self.world.record_frame_state(frame_number=self.decision_counter)
             self.decision_counter += 1
-        
-        if 0:
-            print("State: ", state)
-            print("State len: ", len(state))
-            print("Frame: ", self.frame_counter)
-            print("Control action: ", control)
-            self.potential_field.plot_field()
-            self.autoencoder.compare(pf, num_plots=1)
-            input("Press Enter to continue")
-            
-        return state
     
     def is_terminal(self):
         """
@@ -321,10 +306,13 @@ class Simulation:
         """
         Method for getting the state at the current decision index
         """
+        if decision_index is None:
+            decision_index = self.decision_counter
         self.world.record_frame_state(frame_number=decision_index)
         self.potential_field.update(self.world.return_frame_history(frame_number=decision_index, history_length=5))
         pf = self.potential_field.calculate_field()
         state = self.autoencoder.encode(pf).flatten()
+
         return state
     
     def game_step(self, verbose = False, recording = False):

@@ -4,11 +4,15 @@
 from __future__ import division
 
 import os
-import datetime
 
-from helpers import AlphaZeroConfig, SharedStorage, ReplayBuffer
-from network import Network
-from typing import str, List, Tuple
+from datetime import datetime
+from rich import print
+from typing import List, Tuple
+
+from .helpers import AlphaZeroConfig, SharedStorage, ReplayBuffer
+from .network import Network
+
+import numpy as np
 #####################
 # MCTS functions   #
 #####################
@@ -78,5 +82,6 @@ def create_directory(base_path: str) -> str:
     dir_name = now.strftime("%Y-%m-%d_%H-%M-%S")
     full_path = os.path.join(base_path, dir_name)
     os.makedirs(full_path, exist_ok=True)
+    print(f"Created directory: {full_path}")
 
     return full_path

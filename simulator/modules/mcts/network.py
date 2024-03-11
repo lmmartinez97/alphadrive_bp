@@ -3,7 +3,7 @@
 
 from __future__ import division
 
-import numpy
+import numpy as np
 import pickle
 import tensorflow as tf
 
@@ -61,17 +61,19 @@ class Network(object):
             The built keras model.
         """
         x = layers.Input(shape=(self.arch[0],))
+        input_layer = x
         for units in self.arch[1:]:
             x = layers.Dense(units, activation='relu')(x)
 
         value = layers.Dense(1, activation=None)(x)
         policy = layers.Dense(3, activation=None)(x)
+        policy = layers.Softmax()(policy)
 
-        self.model = models.Model(inputs=x, outputs=[value, policy])
+        self.model = models.Model(inputs=input_layer, outputs=[value, policy])
         
         return self.model
 
-    def inference(self, image: List[numpy.array]) -> Tuple[float, List[float]]:
+    def inference(self, image: List[np.array]) -> Tuple[float, List[float]]:
         """
         Makes a prediction based on the provided image.
 
@@ -85,7 +87,9 @@ class Network(object):
         Tuple[float, List[float]]
             The predicted value and policy.
         """
-        return self.model.predict(image)
+        image = np.array(image).reshape(1, self.arch[0])
+
+        return self.model.predict(image, verbose=0)
 
     def train(self, batch) -> None:
         """
@@ -99,9 +103,9 @@ class Network(object):
         states, targets = zip(*batch)
         value_targets, policy_targets = zip(*targets)
         
-        states = numpy.array(states)
-        value_targets = numpy.array(value_targets)
-        policy_targets = numpy.array(policy_targets)
+        states = np.array(states)
+        value_targets = np.array(value_targets)
+        policy_targets = np.array(policy_targets)
         
         self.model.compile(
             optimizer='adam',

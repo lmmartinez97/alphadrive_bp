@@ -11,13 +11,12 @@ from __future__ import division
 
 import copy
 import numpy as np
-import tensorflow as tf
 
 from copy import deepcopy
-from network import Network
-from typing import Dict, List, Union, Tuple, bool
-from utils import make_uniform_network
+from rich import print
+from typing import Dict, List, Union, Tuple
 
+from .network import Network
 from ..carla.simulation import Simulation
 
 ##########################
@@ -113,6 +112,15 @@ class Node(object):
             bool: True if the node has children, False otherwise.
         """
         return len(self.children) > 0
+    
+    def assign_state(self, state: List[float]) -> None:
+        """
+        Assigns the state to the node.
+
+        Args:
+            state (List[float]): The state to be assigned to the node.
+        """
+        self.state = state
 
     def value(self) -> float:
         """
@@ -158,16 +166,16 @@ class Game:
         self.child_visits = []
         self.num_actions = 3  # action space size for chess; 11259 for shogi, 362 for Go
 
-    def terminal(self) -> bool:
+    def terminal(self, simulation: Simulation) -> bool:
         """
         Checks if the game is in a terminal state.
 
         Returns:
             bool: True if the game is in a terminal state, False otherwise.
         """
-        pass
+        return simulation.is_terminal()
 
-    def terminal_value(self) -> float:
+    def terminal_value(self, simulation: Simulation) -> float:
         """
         Returns the reward associated with the terminal state of the current game.
 
@@ -177,7 +185,7 @@ class Game:
         Returns:
             float: The terminal value indicating the outcome or score of the game.
         """
-        pass
+        return simulation.get_reward()
 
     def legal_actions(self) -> List[int]:
         """
@@ -209,8 +217,9 @@ class Game:
         Args:
             action (int): The action to be applied.
         """
-        state = simulation.mcts_step(verbose=False, recording=recording, action=action)
-        return state
+        simulation.mcts_step(verbose=False, recording=recording, action=action)
+        self.action_history.append(action)
+        self.state_history.append(simulation.get_state(decision_index=None))
 
     def store_search_statistics(self, root: "Node"):
         """

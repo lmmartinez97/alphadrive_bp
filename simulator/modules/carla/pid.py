@@ -43,7 +43,6 @@ class PIDController:
         self.prev_error = 0
         self.integral = 0
         self.error = 0
-        print(self.__dict__)
 
     def run_step(self, error):
         """

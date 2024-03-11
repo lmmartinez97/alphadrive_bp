@@ -3,13 +3,14 @@
 
 from __future__ import division
 
-import math
 import numpy as np
 
-from helpers import SharedStorage, ReplayBuffer, AlphaZeroConfig, Game, Node
-from network import Network
+from rich import print
 from typing import List, Tuple
-from utils import softmax_sample
+
+from .helpers import SharedStorage, ReplayBuffer, AlphaZeroConfig, Game, Node
+from .network import Network
+from .utils import softmax_sample
 from ..carla.simulation import Simulation
 
 # Each self-play job is independent of all others; it takes the latest network
@@ -29,7 +30,8 @@ def run_selfplay(
 
     """
     network = storage.latest_network()
-    for _ in range(config.games_per_iteration):
+    for i in range(config.games_per_iteration):
+        print(f"Starting game {i+1}/{config.games_per_iteration}")
         simulation.init_game()
         game = play_game(config, network, simulation)
         replay_buffer.save_game(game)
@@ -51,9 +53,10 @@ def play_game(config: AlphaZeroConfig, network: Network, simulation: Simulation)
         Game: The final state of the game after completing the self-play.
     """
     game = Game()
-    while not simulation.is_terminal() and len(game.history) < config.max_moves:
+    while not simulation.is_terminal() and len(game.action_history) < config.max_moves:
+        print(f"Playing game - move {len(game.action_history)+1}/{config.max_moves}")
         action, root = run_mcts(config, game, network, simulation)
-        game.apply(action, simulation, recording=True)
+        game.apply(action=action, simulation=simulation, recording=True)
         game.store_search_statistics(root)
     return game
 
@@ -77,6 +80,7 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
     """
     # Initialize the root node
     root = Node(0)
+    root.assign_state(simulation.get_state(decision_index=None))
     
     # Evaluate the root node
     evaluate(root, game, network)
@@ -85,23 +89,30 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
     add_exploration_noise(config, root)
 
     # Run the specified number of simulations
-    for _ in range(config.num_simulations):
+    for i in range(config.num_simulations):
+        print(f"Running simulation {i+1}/{config.num_simulations} in monte carlo tree search.")
         node = root
         scratch_game = game.clone()
+        node.assign_state(simulation.get_state(decision_index=None))
         search_path = [node]
 
         # Traverse the tree until we reach an unexpanded node
         while node.expanded():
+            print(f"Playing game - move {len(scratch_game.action_history)+1}/{config.max_moves} - MCTS")
             action, node = select_child(config, node)
-            scratch_game.apply(action=action, simulation=simulation, recording=False)
+            scratch_game.apply(action=action, simulation=simulation, recording=True)
+            node.assign_state(simulation.get_state(decision_index=len(scratch_game.action_history)))
             search_path.append(node)
 
+        #return simulation to the original state - before MCTS started
+        print(f"Restoring game state to {len(game.action_history)}")
+        simulation.world.restore_frame_state(frame_number=len(game.action_history))
+        simulation.decision_counter = len(game.action_history)
         # Evaluate the leaf node and propagate the value back up the search path
         value = evaluate(node, scratch_game, network)
-        backpropagate(search_path, value, scratch_game.to_play())
+        backpropagate(search_path, value)
         
-    #return simulation to the original state
-    simulation.world.restore_frame_state(frame_number=len(game.action_history))
+
     # Select the best action from the root node
     return select_action(config, game, root), root
 
@@ -211,32 +222,30 @@ def evaluate(node: Node, game: Game, network: Network) -> float:
     Returns:
         float: The value predicted by the neural network for the given game state.
     """
-    value, policy_logits = network.inference(game.make_image(-1))
-    node.to_play = game.to_play()
-    policy = {a: np.exp(policy_logits[a]) for a in game.legal_actions()}
-    policy_sum = sum(policy.values())
-    for action, p in policy.items():
+    value, policy_dist = network.inference(node.state)
+    print(f"Value: {value}, Policy: {policy_dist}")
+    policy_sum = np.sum(policy_dist)
+    for action, p in enumerate(policy_dist):
         node.children[action] = Node(p / policy_sum)
     return value
 
 
 # At the end of a simulation, we propagate the evaluation all the way up the
 # tree to the root.
-def backpropagate(search_path: List[Node], value: float, to_play):
+def backpropagate(search_path: List[Node], value: float):
     """
     Backpropagates the evaluation value through the Monte Carlo Tree Search (MCTS) tree.
 
     Args:
         - search_path (List[Node]): List of nodes representing the search path from the leaf to the root.
         - value (float): The evaluation value to be backpropagated.
-        - to_play: The player to play at the terminal state.
 
     Returns:
         None
 
     """
     for node in search_path:
-        node.value_sum += value if node.to_play == to_play else (1 - value)
+        node.value_sum += value 
         node.visit_count += 1
 
 
@@ -260,7 +269,7 @@ def add_exploration_noise(config: AlphaZeroConfig, node: Node):
       - None
     """
     actions = list(node.children.keys())
-    noise = numpy.random.gamma(config.root_dirichlet_alpha, 1, len(actions))
+    noise = np.random.gamma(config.root_dirichlet_alpha, 1, len(actions))
     frac = config.root_exploration_fraction
     for a, n in zip(actions, noise):
         node.children[a].prior = node.children[a].prior * (1 - frac) + n * frac

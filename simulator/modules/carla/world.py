@@ -303,8 +303,7 @@ class World(object):
         Args:
             frame_number (int): The frame number to restore the state.
         """
-        groups = self.dataframe.groupby("frame")
-        frame_df = groups.get_group(frame_number)
+        frame_df = self.dataframe_record[frame_number]
         for index, row in frame_df.iterrows():
             actor = self.world.get_actor(int(row["id"]))
             actor.set_transform(
@@ -327,7 +326,10 @@ class World(object):
                     z=row["zAngVelocity"],
                 )
             )
-            
+        #remove everytging after frame_number
+        for key in list(self.dataframe_record.keys()):
+            if key > frame_number:
+                del self.dataframe_record[key]
         self.world.tick()
         self.world.tick()
 
