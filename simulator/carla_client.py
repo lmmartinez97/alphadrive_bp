@@ -188,7 +188,6 @@ def main():
 
     except KeyboardInterrupt as e:
         print("\n")
-        simulation.plot_results()
         if simulation.world is not None:
             settings = simulation.world.world.get_settings()
             settings.synchronous_mode = False

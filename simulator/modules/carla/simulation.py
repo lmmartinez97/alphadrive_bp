@@ -143,7 +143,7 @@ class Simulation:
         # self.potential_field = PotentialField(radius_x = rx, radius_y = ry, step_x = sx, step_y = sy)
  
         #Initialize GlobalRoutePlanner
-        self.grp = GlobalRoutePlanner(wmap=self.world.map, sampling_resolution=self.simulation_period * self.agent_type.max_speed / 3.6) 
+        self.grp = GlobalRoutePlanner(wmap=self.world.map, sampling_resolution= self.simulation_period * self.agent_type.max_speed / 3.6) 
 
         #initialize MPC controller
         parameters = {
@@ -158,14 +158,14 @@ class Simulation:
             'air_density': 1.2,
             'gravity': 9.81,
             'dt': self.simulation_period,
-            'prediction_horizon': 4,
+            'prediction_horizon': 6,
             'max_steering_rate': 0.1,
-            'tracking_cost_weight': 1,
-            'velocity_cost_weight': 1,
-            'yaw_cost_weight': 1,
-            'steering_rate_cost_weight': 1,
+            'tracking_cost_weight': 4,
+            'velocity_cost_weight': 4,
+            'yaw_cost_weight': 3,
+            'steering_rate_cost_weight': 2,
             'pedal_rate_cost_weight': 1,
-            'exponential_decay_rate': 0.6,
+            'exponential_decay_rate': 0.95,
         }
         self.mpc = MPCController(parameters)
         
@@ -257,9 +257,9 @@ class Simulation:
         mpc_state = {
             'x': transform.location.x,
             'y': transform.location.y,
-            'yaw': transform.rotation.yaw,
+            'yaw': np.deg2rad(transform.rotation.yaw),
             'velocity': speed,
-            'pitch': transform.rotation.pitch, #used to calculate weight component in the direction of the vehicle
+            'pitch': np.deg2rad(transform.rotation.pitch), #used to calculate weight component in the direction of the vehicle
         }
         control_actions, predictions = self.mpc(state=mpc_state)
         control = carla.VehicleControl(
@@ -268,9 +268,7 @@ class Simulation:
             brake=control_actions['brake'],
             hand_brake=False,
             manual_gear_shift=False
-        )
-        print_blue("Control: ", control)
-        
+        )       
         self.world.player.apply_control(control)
         
         #calculate errors
@@ -312,12 +310,14 @@ class Simulation:
             input("Press Enter to continue")
             
         #plot the predicted trajectory using carla modules
-        for elt in predictions:
-            self.world.world.debug.draw_point(
-                carla.Location(x=elt['x'], y=elt['y'], z=1),
-                size=0.1,
+        for idx in range(len(predictions)-1):
+            self.world.world.debug.draw_arrow(
+                begin=carla.Location(x=predictions[idx]['x'], y=predictions[idx]['y'], z=2),
+                end=carla.Location(x=predictions[idx+1]['x'], y=predictions[idx+1]['y'], z=2),
+                thickness=0.05,
+                arrow_size=0.05,
                 color=carla.Color(0, 0, 255),
-                life_time=1,
+                life_time=0.5,
             )
             
             
@@ -365,7 +365,7 @@ class Simulation:
         # Position figure
         plt.figure(figsize=figsize)
         plt.plot([pos.x for pos in self.position], [pos.y for pos in self.position], label="Position", linewidth=width)
-        plt.plot([pos.x for pos in self.pos_target], [pos.y for pos in self.pos_target], label="Target Position", linewidth=width)
+        plt.scatter([pos[0] for pos in self.pos_target], [pos[1] for pos in self.pos_target], label="Target Position", linewidth=width)
         plt.title("Position")
         plt.xlabel("X")
         plt.ylabel("Y")
