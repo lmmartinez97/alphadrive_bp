@@ -1,7 +1,10 @@
 from dataclasses import dataclass
+from typing import List
+
+import glob
+import numpy as np
 import os
 import sys
-import glob
 
 try:
     sys.path.append(
@@ -24,36 +27,57 @@ class VehicleState:
     Represents the state of a vehicle in the simulation at a specific frame.
 
     Attributes:
-        actor_id (int): Unique identifier for the vehicle actor.
-        position (carla.Location): Current position of the vehicle.
-        velocity (carla.Vector3D): Current velocity of the vehicle.
-        acceleration (carla.Vector3D): Current acceleration of the vehicle.
-        rotation (carla.Rotation): Current rotation of the vehicle.
-        angular_velocity (carla.Vector3D): Current angular velocity of the vehicle.
-        frame_counter (int): Frame number when the state was recorded.
-        throttle (float): Current throttle input applied to the vehicle.
-        brake (float): Current brake input applied to the vehicle.
-        steer (float): Current steering input applied to the vehicle.
-        handbrake (bool): Indicates if the handbrake is engaged.
-        reverse (bool): Indicates if the vehicle is in reverse gear.
-        manual_gear_shift (bool): Indicates if manual gear shifting is enabled.
-        gear (int): Current gear of the vehicle.
+        id (int): Unique identifier for the vehicle actor.
+        x (float): Current x position of the vehicle.
+        y (float): Current y position of the vehicle.
+        z (float): Current z position of the vehicle.
+        pitch (float): Current pitch of the vehicle in radians.
+        yaw (float): Current yaw of the vehicle in radians.
+        roll (float): Current roll of the vehicle in radians.
+        xVelocity (float): Current x velocity of the vehicle.
+        yVelocity (float): Current y velocity of the vehicle.
+        zVelocity (float): Current z velocity of the vehicle.
+        xAngVelocity (float): Current x angular velocity of the vehicle in radians.
+        yAngVelocity (float): Current y angular velocity of the vehicle in radians.
+        zAngVelocity (float): Current z angular velocity of the vehicle in radians.
+        width (float): Width of the vehicle.
+        height (float): Height of the vehicle.
+        hero (bool): Indicates if the vehicle is the hero vehicle.
+        frame (int): Frame number when the state was recorded.
     """
-    actor_id: int
-    position: carla.Location
-    velocity: carla.Vector3D
-    acceleration: carla.Vector3D
-    rotation: carla.Rotation
-    angular_velocity: carla.Vector3D
-    frame_counter: int
-    throttle: float
-    brake: float
-    steer: float
-    handbrake: bool
-    reverse: bool
-    manual_gear_shift: bool
-    gear: int
-    # Other necessary vehicle attributes
+    id: int
+    x: float
+    y: float
+    z: float
+    pitch: float
+    yaw: float
+    roll: float
+    xVelocity: float
+    yVelocity: float
+    zVelocity: float
+    xAngVelocity: float
+    yAngVelocity: float
+    zAngVelocity: float
+    width: float
+    height: float
+    hero: bool
+    frame: int
+
+    def print_state(self):
+        """
+        Prints the state of the vehicle.
+        """
+        print("==== Vehicle State ====")
+        print(f"ID: {self.id}")
+        print(f"Position: ({self.x}, {self.y}, {self.z})")
+        print(f"Orientation: ({self.pitch}, {self.yaw}, {self.roll})")
+        print(f"Velocity: ({self.xVelocity}, {self.yVelocity}, {self.zVelocity})")
+        print(f"Angular Velocity: ({self.xAngVelocity}, {self.yAngVelocity}, {self.zAngVelocity})")
+        print(f"Width: {self.width}")
+        print(f"Height: {self.height}")
+        print(f"Hero: {self.hero}")
+        print(f"Frame: {self.frame}")
+
 
 class StateManager:
     """
@@ -63,7 +87,7 @@ class StateManager:
         vehicle_states (list): List to store VehicleState objects.
     """
     def __init__(self):
-        self.vehicle_states = []
+        self.frame_list = [] #index of list is frame number, each element is a list of vehicle states
 
     def save_vehicle_state(self, vehicle, frame_number):
         """
@@ -73,25 +97,66 @@ class StateManager:
             vehicle (carla.Vehicle): The vehicle whose state is to be saved.
             frame_number (int): The frame number when the state is recorded.
         """
-        state = VehicleState(
-            actor_id=vehicle.id,
-            position=vehicle.get_location(),
-            velocity=vehicle.get_velocity(),
-            acceleration=vehicle.get_acceleration(),
-            rotation=vehicle.get_transform().rotation,
-            angular_velocity=vehicle.get_angular_velocity(),
-            frame_counter=frame_number,
-            throttle=vehicle.get_control().throttle,
-            brake=vehicle.get_control().brake,
-            steer=vehicle.get_control().steer,
-            handbrake=vehicle.get_control().hand_brake,
-            reverse=vehicle.get_control().reverse,
-            manual_gear_shift=vehicle.get_control().manual_gear_shift,
-            gear=vehicle.get_control().gear
-        )
-        self.vehicle_states.append(state)
+        if vehicle.attributes["role_name"] == "hero":
+            hero = 1
+        else:
+            hero = 0
+        
+        position = vehicle.get_location()
+        rotation = vehicle.get_transform().rotation
+        velocity = vehicle.get_velocity()
+        ang_velocity = vehicle.get_angular_velocity()
+        bounding_box = vehicle.bounding_box
+        state_dict = {
+            "id": vehicle.id,
+            "x": position.x,
+            "y": position.y,
+            "z": position.z,
+            "pitch": np.deg2rad(rotation.pitch),
+            "yaw": np.deg2rad(rotation.yaw),
+            "roll": np.deg2rad(rotation.roll),
+            "xVelocity": velocity.x,
+            "yVelocity": velocity.y,
+            "zVelocity": velocity.z,
+            "xAngVelocity": np.deg2rad(ang_velocity.x),
+            "yAngVelocity": np.deg2rad(ang_velocity.y),
+            "zAngVelocity": np.deg2rad(ang_velocity.z),
+            "width": 2 * bounding_box.extent.x,
+            "height": 2 * bounding_box.extent.y,
+            "hero": hero,
+            "frame": frame_number,
+        }
+        state = VehicleState(**state_dict)
+        return state
 
-    def restore_vehicle_state(self, vehicle, target_frame_number):
+    def save_frame(self, frame_number: int, vehicle_list: List[carla.Actor]):
+        """
+        Saves the current frame, with all vehicles that are present in the simulation.
+
+        Args:
+            frame_number (int): The frame number to save.
+            vehicle_list (list): List of all vehicles in the simulation.
+        """
+        frame = []
+        for vehicle in vehicle_list:
+            state = self.save_vehicle_state(vehicle, frame_number)
+            frame.append(state)
+        self.frame_list.append(frame)
+        
+    def restore_frame(self, frame_number: int, vehicle_list: List[carla.Actor]):
+        """
+        Restores the state of all vehicles to the specified frame.
+
+        Args:
+            frame_number (int): The frame number to restore.
+            vehicle_list (list): List of all vehicles in the simulation.
+        """
+        for vehicle in vehicle_list:
+            self.restore_vehicle_state(vehicle.id, frame_number)
+        #Remove all frames after the specified frame number
+        self.frame_list = self.frame_list[:frame_number+1]
+        
+    def restore_vehicle_state(self, vehicle_id, target_frame_number):
         """
         Restores the state of a vehicle to the specified frame.
 
@@ -99,29 +164,39 @@ class StateManager:
             vehicle (carla.Vehicle): The vehicle to restore the state.
             target_frame_number (int): The frame number to restore the state.
         """
-        matching_states = [
-            state for state in self.vehicle_states
-            if state.actor_id == vehicle.id and state.frame_counter == target_frame_number
-        ]
-
-        if matching_states:
-            state_to_restore = matching_states[0]  # Assuming there's only one match
-            vehicle.set_location(state_to_restore.position)
-            vehicle.set_target_velocity(state_to_restore.velocity)
-            #vehicle.set_acceleration(state_to_restore.acceleration)
-            vehicle.set_transform(
-                carla.Transform(state_to_restore.position, state_to_restore.rotation)
+        #Find the vehicle state that matches the vehicle_id and the target_frame_number
+        frame_state = self.frame_list[target_frame_number]
+        matching_vehicle_state = None
+        for state in frame_state:
+            if state.id == vehicle_id:
+                matching_vehicle_state = state
+                break
+        if matching_vehicle_state is None:
+            raise ValueError("No matching vehicle state found.")
+        #Restore the vehicle state
+        actor = self.world.get_actor(vehicle_id)
+        actor.set_transform(
+            carla.Transform(
+                carla.Location(matching_vehicle_state.x, matching_vehicle_state.y, matching_vehicle_state.z),
+                carla.Rotation(
+                    np.rad2deg(matching_vehicle_state.pitch),
+                    np.rad2deg(matching_vehicle_state.yaw),
+                    np.rad2deg(matching_vehicle_state.roll)
+                )
             )
-            vehicle.set_target_angular_velocity(state_to_restore.angular_velocity)
-            vehicle.apply_control(carla.VehicleControl(
-                throttle=state_to_restore.throttle,
-                brake=state_to_restore.brake,
-                steer=state_to_restore.steer,
-                hand_brake=state_to_restore.handbrake,
-                reverse=state_to_restore.reverse,
-                manual_gear_shift=state_to_restore.manual_gear_shift,
-                gear=state_to_restore.gear
-            ))
-        else:
-            print(f"No matching VehicleState found for actor {vehicle.id} at frame {target_frame_number}")
-            # Handle if no matching state is found (e.g., raise an exception or log a message)
+        )
+        actor.set_target_velocity(
+            carla.Vector3D(
+                matching_vehicle_state.xVelocity,
+                matching_vehicle_state.yVelocity,
+                matching_vehicle_state.zVelocity
+            )
+        )
+        actor.set_target_angular_velocity(
+            carla.Vector3D(
+                np.rad2deg(matching_vehicle_state.xAngVelocity),
+                np.rad2deg(matching_vehicle_state.yAngVelocity),
+                np.rad2deg(matching_vehicle_state.zAngVelocity)
+            )
+        )
+

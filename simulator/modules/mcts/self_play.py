@@ -223,7 +223,6 @@ def evaluate(node: Node, game: Game, network: Network) -> float:
         float: The value predicted by the neural network for the given game state.
     """
     value, policy_dist = network.inference(node.state)
-    print(f"Value: {value}, Policy: {policy_dist}")
     policy_sum = np.sum(policy_dist)
     for action, p in enumerate(policy_dist):
         node.children[action] = Node(p / policy_sum)

@@ -86,10 +86,11 @@ class World(object):
         
         # Non playable vehicles
         self.npcs = []
-        self.npc_vehicles_num = 15
+        self.npc_vehicles_num = 1
 
-        # Dataframe to store the state of all vehicles in the world
-        self.dataframe_record = {}
+        # Dictionary to store frames
+        # Every key is a frame number and the value is a dictionary - key is the vehicle id and value is a dictionary with the vehicle state
+        self.state_record = {}
         
         # Set up spawn point and destination for ego vehicle
         self.distance = 300
@@ -259,15 +260,15 @@ class World(object):
                 "x": position.x,
                 "y": position.y,
                 "z": position.z,
-                "pitch": rotation.pitch,
-                "yaw": rotation.yaw,
-                "roll": rotation.roll,
+                "pitch": np.deg2rad(rotation.pitch),
+                "yaw": np.deg2rad(rotation.yaw),
+                "roll": np.deg2rad(rotation.roll),
                 "xVelocity": velocity.x,
                 "yVelocity": velocity.y,
                 "zVelocity": velocity.z,
-                "xAngVelocity": ang_velocity.x,
-                "yAngVelocity": ang_velocity.y,
-                "zAngVelocity": ang_velocity.z,
+                "xAngVelocity": np.deg2rad(ang_velocity.x),
+                "yAngVelocity": np.deg2rad(ang_velocity.y),
+                "zAngVelocity": np.deg2rad(ang_velocity.z),
                 "width": 2 * bounding_box.extent.x,
                 "height": 2 * bounding_box.extent.y,
                 "hero": hero,
@@ -304,13 +305,16 @@ class World(object):
             frame_number (int): The frame number to restore the state.
         """
         frame_df = self.dataframe_record[frame_number]
+        print(frame_df)
+        input()
         for index, row in frame_df.iterrows():
+            print("Restoring actor with id", int(row["id"]))
             actor = self.world.get_actor(int(row["id"]))
             actor.set_transform(
                 carla.Transform(
                     carla.Location(x=row["x"], y=row["y"], z=row["z"]),
                     carla.Rotation(
-                        pitch=row["pitch"], yaw=row["yaw"], roll=row["roll"]
+                        pitch=np.rad2deg(row["pitch"]), yaw=np.rad2deg(row["yaw"]), roll=np.rad2deg(row["roll"])
                     ),
                 )
             )
@@ -321,9 +325,9 @@ class World(object):
             )
             actor.set_target_angular_velocity(
                 carla.Vector3D(
-                    x=row["xAngVelocity"],
-                    y=row["yAngVelocity"],
-                    z=row["zAngVelocity"],
+                    x=np.rad2deg(row["xAngVelocity"]),
+                    y=np.rad2deg(row["yAngVelocity"]),
+                    z=np.rad2deg(row["zAngVelocity"]),
                 )
             )
         #remove everytging after frame_number

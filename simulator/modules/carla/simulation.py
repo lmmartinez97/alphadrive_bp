@@ -269,13 +269,14 @@ class Simulation:
             prev_timestamp = self.world.world.get_snapshot().timestamp
             self.frame_counter += 1
 
-        if self.display:
+        if recording:
             self.world.render(self.display)
             pygame.display.flip()
         
-        if recording: #if the simulation is being run from aplhazero step, NOT from MCTS search
-            self.world.record_frame_state(frame_number=self.decision_counter)
-            self.decision_counter += 1
+        print(f"Saving simulation state on decision counter {self.decision_counter}")
+        self.world.record_frame_state(frame_number=self.decision_counter)
+        self.decision_counter += 1
+        print(self.world.dataframe_record)
     
     def is_terminal(self):
         """
