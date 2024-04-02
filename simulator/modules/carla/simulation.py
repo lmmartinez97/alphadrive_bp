@@ -51,17 +51,18 @@ from carla import ColorConverter as cc
 # ==============================================================================
 
 
-from .keyboard_control import KeyboardControl
-from .printers import print_blue, print_green, print_highlight, print_red
-from .world import World
-from .hud import HUD
-from .potential_field import PotentialField
-from .pid import CarController
 
-from ..agents.navigation.global_route_planner import GlobalRoutePlanner
+
 from ..agents.navigation.behavior_types import Cautious, Normal, Aggressive
-
+from ..agents.navigation.global_route_planner import GlobalRoutePlanner
 from .autoencoder import load_model
+from .hud import HUD
+from .keyboard_control import KeyboardControl
+from .pid import CarController
+from .potential_field import PotentialField
+from .printers import print_blue, print_green, print_highlight, print_red
+from .state_manager import StateManager
+from .world import World
 
 class Simulation:
   
@@ -124,6 +125,9 @@ class Simulation:
         # get traffic manager
         self.traffic_manager = self.client.get_trafficmanager()
         self.sim_world = self.client.get_world()
+        
+        #init state manager
+        self.state_manager = StateManager()
 
         # initialize hud and world
         self.hud = HUD(self.args.width, self.args.height, text=__doc__)
@@ -163,7 +167,7 @@ class Simulation:
             'max_steering_increment': 1,
             'max_integral_threshold': None,
         }
-        
+        #Configure Stanley controller
         self.stanley_params = {
             'Ke': 0.8,
             'Kv': 1,
@@ -184,6 +188,7 @@ class Simulation:
     def init_game(self):
         """Method for initializing a new episode"""
         self.world.restart(self.args)
+        self.state_manager.reset()
     
         self.agent_type = self.agents_dict[self.args.behavior]
         self.agent_type.max_speed = 50
@@ -274,7 +279,7 @@ class Simulation:
             pygame.display.flip()
         
         print(f"Saving simulation state on decision counter {self.decision_counter}")
-        self.world.record_frame_state(frame_number=self.decision_counter)
+        self.state_manager.save_frame(self.decision_counter, self.world.actor_list)
         self.decision_counter += 1
         print(self.world.dataframe_record)
     

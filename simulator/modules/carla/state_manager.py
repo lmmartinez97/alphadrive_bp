@@ -4,6 +4,7 @@ from typing import List
 import glob
 import numpy as np
 import os
+import pandas as pd
 import sys
 
 try:
@@ -199,4 +200,33 @@ class StateManager:
                 np.rad2deg(matching_vehicle_state.zAngVelocity)
             )
         )
+    
+    def return_frame_history(self, frame_number: int, history_length: int):
+        """
+        Returns an appropiate dataframe to calculate a potential field instance.
 
+        Args:
+            frame_number (int): The frame number to return the state.
+            history_length (int): The length of the history to return.
+
+        Returns:
+            pd.DataFrame: A dataframe with the state history of all vehicles
+        """
+        #Get the frame number to start the history
+        start_frame = frame_number - history_length
+        if start_frame < 0:
+            start_frame = 0
+        #Get the frame list to construct the dataframe
+        frame_list = self.frame_list[start_frame:frame_number+1]
+        #Create a dataframe with the state history of all vehicles
+        df = pd.DataFrame()
+        for frame in frame_list:
+            for vehicle_state in frame:
+                df = df.append(vehicle_state)
+        return df
+
+    def reset(self):
+        """
+        Resets the state manager.
+        """
+        self.frame_list = []

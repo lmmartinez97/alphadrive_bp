@@ -88,6 +88,7 @@ class World(object):
         self.npcs = []
         self.npc_vehicles_num = 1
 
+
         # Dictionary to store frames
         # Every key is a frame number and the value is a dictionary - key is the vehicle id and value is a dictionary with the vehicle state
         self.state_record = {}
@@ -235,107 +236,6 @@ class World(object):
 
         actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)
-
-    def record_frame_state(self, frame_number):
-        """
-        Saves the state of all vehicles in the world at the specified frame number.
-
-        Args:
-            frame_number (int): The frame number when the state is recorded.
-        """
-        local_df = pd.DataFrame()
-        for vehicle in self.world.get_actors().filter("vehicle.*"):
-            if vehicle.attributes["role_name"] == "hero":
-                hero = 1
-            else:
-                hero = 0
-            
-            position = vehicle.get_location()
-            rotation = vehicle.get_transform().rotation
-            velocity = vehicle.get_velocity()
-            ang_velocity = vehicle.get_angular_velocity()
-            bounding_box = vehicle.bounding_box
-            state_dict = {
-                "id": vehicle.id,
-                "x": position.x,
-                "y": position.y,
-                "z": position.z,
-                "pitch": np.deg2rad(rotation.pitch),
-                "yaw": np.deg2rad(rotation.yaw),
-                "roll": np.deg2rad(rotation.roll),
-                "xVelocity": velocity.x,
-                "yVelocity": velocity.y,
-                "zVelocity": velocity.z,
-                "xAngVelocity": np.deg2rad(ang_velocity.x),
-                "yAngVelocity": np.deg2rad(ang_velocity.y),
-                "zAngVelocity": np.deg2rad(ang_velocity.z),
-                "width": 2 * bounding_box.extent.x,
-                "height": 2 * bounding_box.extent.y,
-                "hero": hero,
-                "frame": frame_number,
-            }
-        local_df = pd.concat([local_df, pd.DataFrame([state_dict])], ignore_index=True)
-        self.dataframe_record[frame_number] = local_df
-
-    def return_frame_history(self, frame_number: int, history_length: int):
-        """
-        Returns an appropiate dataframe to calculate a potential field instance.
-
-        Args:
-            frame_number (int): The frame number to return the state.
-            history_length (int): The length of the history to return.
-
-        Returns:
-            pd.DataFrame: A dataframe with the state history of all vehicles
-        """
-        history = pd.DataFrame()
-        for i in range(history_length):
-            if frame_number - i < 0:
-                break
-            history = pd.concat(
-                [history, self.dataframe_record[frame_number - i]], ignore_index=True
-            )
-        return history
-
-    def restore_frame_state(self, frame_number):
-        """
-        Restores the state of all vehicles in the world to the specified frame.
-
-        Args:
-            frame_number (int): The frame number to restore the state.
-        """
-        frame_df = self.dataframe_record[frame_number]
-        print(frame_df)
-        input()
-        for index, row in frame_df.iterrows():
-            print("Restoring actor with id", int(row["id"]))
-            actor = self.world.get_actor(int(row["id"]))
-            actor.set_transform(
-                carla.Transform(
-                    carla.Location(x=row["x"], y=row["y"], z=row["z"]),
-                    carla.Rotation(
-                        pitch=np.rad2deg(row["pitch"]), yaw=np.rad2deg(row["yaw"]), roll=np.rad2deg(row["roll"])
-                    ),
-                )
-            )
-            actor.set_target_velocity(
-                carla.Vector3D(
-                    x=row["xVelocity"], y=row["yVelocity"], z=row["zVelocity"]
-                )
-            )
-            actor.set_target_angular_velocity(
-                carla.Vector3D(
-                    x=np.rad2deg(row["xAngVelocity"]),
-                    y=np.rad2deg(row["yAngVelocity"]),
-                    z=np.rad2deg(row["zAngVelocity"]),
-                )
-            )
-        #remove everytging after frame_number
-        for key in list(self.dataframe_record.keys()):
-            if key > frame_number:
-                del self.dataframe_record[key]
-        self.world.tick()
-        self.world.tick()
 
     def next_weather(self, reverse=False):
         """Get next weather setting"""

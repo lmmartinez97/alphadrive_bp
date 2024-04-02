@@ -106,8 +106,8 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
 
         #return simulation to the original state - before MCTS started
         print(f"Restoring game state to {len(game.action_history)}")
-        simulation.world.restore_frame_state(frame_number=len(game.action_history))
-        simulation.decision_counter = len(game.action_history)
+        simulation.state_manager.restore_frame(frame_number=len(game.action_history)) #we restore to frame of main game, NOT mock game for mcts
+        simulation.decision_counter = len(game.action_history) #decision counter has increased with MCTS mock game, so we need to reset it to the main game decision counter
         # Evaluate the leaf node and propagate the value back up the search path
         value = evaluate(node, scratch_game, network)
         backpropagate(search_path, value)
