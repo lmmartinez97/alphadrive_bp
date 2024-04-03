@@ -139,7 +139,7 @@ def select_action(config: AlphaZeroConfig, game: Game, root: Node) -> int:
         (child.visit_count, action) for action, child in root.children.items()
     ]
     if len(game.action_history) < config.num_sampling_moves:
-        action = softmax_sample(visit_counts=visit_counts)
+        _, action = softmax_sample(visit_counts=visit_counts)
     else:
         _, action = max(visit_counts)
     return action

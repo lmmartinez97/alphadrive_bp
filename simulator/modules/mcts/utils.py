@@ -30,7 +30,10 @@ def softmax_sample(visit_counts: List[Tuple[int, int]]) -> Tuple[int, int]:
     counts, actions = zip(*visit_counts)
     probs = np.exp(counts) / np.sum(np.exp(counts))  # Apply softmax to visit counts
     action = np.random.choice(actions, p=probs)  # Select action probabilistically
-    return action
+    #find action index
+    action_index = actions.index(action)
+    counts = counts[action_index]
+    return action, counts
 
 def launch_job(f, *args):
     f(*args)

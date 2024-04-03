@@ -187,8 +187,10 @@ class Simulation:
 
     def init_game(self):
         """Method for initializing a new episode"""
+        print("Initializing new game")
         self.world.restart(self.args)
-        self.state_manager.reset()
+        self.state_manager.reset() #reset state manager and frame history
+        self.pid.done = False #reset done flag of pid controller
     
         self.agent_type = self.agents_dict[self.args.behavior]
         self.agent_type.max_speed = 50
