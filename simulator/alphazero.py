@@ -47,9 +47,9 @@ def alphazero(args) -> Network:
     # Configuration for the AlphaZero algorithm
     config_dict = {
         "num_actors": 1,
-        "num_sampling_moves": 30,
-        "max_moves": 100,
-        "num_simulations": 30,
+        "num_sampling_moves": 10,
+        "max_moves": 10,
+        "num_simulations": 20,
         "root_dirichlet_alpha": 0.3,
         "root_exploration_fraction": 0.25,
         "pb_c_base": 19652,

@@ -26,7 +26,7 @@ def run_selfplay(
         config (AlphaZeroConfig): Instance of the AlphaZeroConfig class that contains parameters for execution and training.
         storage (SharedStorage): Object responsible for storing and retrieving neural network checkpoints during training.
         replay_buffer (ReplayBuffer): Buffer for storing self-play games to be used in training.
-        simulation (Simulation): Instance of the Simulation class that represents the game simulation.
+        simulation (Simulation): Instance of the Simulation class that represents the game.
 
     """
     network = storage.latest_network()
@@ -53,7 +53,7 @@ def play_game(config: AlphaZeroConfig, network: Network, simulation: Simulation)
         Game: The final state of the game after completing the self-play.
     """
     game = Game()
-    while not simulation.is_terminal() and len(game.action_history) < config.max_moves:
+    while not game.terminal(simulation=simulation) and len(game.action_history) < config.max_moves:
         print(f"Playing game - move {len(game.action_history)+1}/{config.max_moves}")
         action, root = run_mcts(config, game, network, simulation)
         game.apply(action=action, simulation=simulation, recording=True)
@@ -80,7 +80,7 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
     """
     # Initialize the root node
     root = Node(0)
-    root.assign_state(simulation.get_state(decision_index=None))
+    root.assign_state(simulation.get_state(decision_index=len(game.action_history)))
     
     # Evaluate the root node
     evaluate(root, game, network)
@@ -96,9 +96,9 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
         node.assign_state(simulation.get_state(decision_index=None))
         search_path = [node]
 
-        # Traverse the tree until we reach an unexpanded node
-        while node.expanded():
-            print(f"Playing game - move {len(scratch_game.action_history)+1}/{config.max_moves} - MCTS")
+        # Traverse the tree until we reach either a terminal state, or the maximum number of moves allowed for mock game
+        while node.expanded() and not scratch_game.terminal(simulation=simulation) and len(scratch_game.action_history) < config.max_moves:
+            print(f"Playing game - move {len(scratch_game.action_history)+1}/{config.max_moves} - In game {i+1}/{config.num_simulations} of MCTS")
             action, node = select_child(config, node)
             scratch_game.apply(action=action, simulation=simulation, recording=True)
             node.assign_state(simulation.get_state(decision_index=len(scratch_game.action_history)))
@@ -106,7 +106,7 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
 
         #return simulation to the original state - before MCTS started
         print(f"Restoring game state to {len(game.action_history)}")
-        simulation.state_manager.restore_frame(frame_number=len(game.action_history)) #we restore to frame of main game, NOT mock game for mcts
+        simulation.state_manager.restore_frame(frame_number=len(game.action_history), vehicle_list=simulation.world.actor_list) #we restore to frame of main game, NOT mock game for mcts
         simulation.decision_counter = len(game.action_history) #decision counter has increased with MCTS mock game, so we need to reset it to the main game decision counter
         # Evaluate the leaf node and propagate the value back up the search path
         value = evaluate(node, scratch_game, network)
@@ -138,8 +138,8 @@ def select_action(config: AlphaZeroConfig, game: Game, root: Node) -> int:
     visit_counts = [
         (child.visit_count, action) for action, child in root.children.items()
     ]
-    if len(game.history) < config.num_sampling_moves:
-        _, action = softmax_sample(visit_counts=visit_counts)
+    if len(game.action_history) < config.num_sampling_moves:
+        action = softmax_sample(visit_counts=visit_counts)
     else:
         _, action = max(visit_counts)
     return action

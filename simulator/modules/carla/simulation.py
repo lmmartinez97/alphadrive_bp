@@ -202,14 +202,13 @@ class Simulation:
             self.traffic_manager.ignore_lights_percentage(vehicle, 0) #vehicle does not ignore lights
             self.traffic_manager.ignore_vehicles_percentage(vehicle, 0) #vehicle does not ignore other vehicles
             vehicle.set_autopilot(True)
-            vehicle.set_target_velocity(carla.Vector3D(x=self.agent_type.max_speed/3.6, y=0, z=0)) #every vehicle starts at the same speed
-            
+            vehicle.set_target_velocity(carla.Vector3D(x=self.agent_type.max_speed*np.random.uniform(0.85, 1.15)/3.6, y=0, z=0)) 
+            #vehicle.set_target_velocity(carla.Vector3D(x=self.agent_type.max_speed/3.6, y=0, z=0))
+            #vehicles spawn with random speed between 85% and 115% of the agents target speed
         # Set the agent destination
         self.route = self.grp.trace_route(self.world.spawn_waypoint, self.world.dest_waypoint)
         self.reference = [[self.agent_type.max_speed, waypoint.transform] for waypoint, _ in self.route[1:]]
         self.pid.update_reference(self.reference)
-        
-        self.world.dataframe = pd.DataFrame()
 
         self.prev_timestamp = self.world.world.get_snapshot().timestamp
         self.first_timestamp = self.prev_timestamp
@@ -245,7 +244,9 @@ class Simulation:
         self.pid.set_offset(target_offset)
 
         for _ in range(self.decision_period):
-                
+            if recording:
+                self.world.render(self.display)
+                pygame.display.flip()
             #Get ego vehicle variables and run PID controller
             velocity = self.world.player.get_velocity()
             speed = 3.6 * np.sqrt(velocity.x**2 + velocity.y**2)
@@ -274,26 +275,37 @@ class Simulation:
             prev_timestamp = self.world.world.get_snapshot().timestamp
             self.frame_counter += 1
 
-        if recording:
-            self.world.render(self.display)
-            pygame.display.flip()
+        # if recording:
+        #     self.world.render(self.display)
+        #     pygame.display.flip()
         
         print(f"Saving simulation state on decision counter {self.decision_counter}")
-        self.state_manager.save_frame(self.decision_counter, self.world.actor_list)
+        self.state_manager.save_frame(frame_number=self.decision_counter, vehicle_list=self.world.actor_list)
         self.decision_counter += 1
-        print(self.world.dataframe_record)
+        # for state in self.state_manager.frame_list[self.decision_counter]:
+        #     state.display()
     
     def is_terminal(self):
         """
         Method for checking if the current state is terminal
         """
-        ret = False
+        ret_dict = {
+            "frame_counter": False,
+            "pid": False,
+            "collision": False,
+        }
         if self.frame_counter >= self.frame_limit:
-            ret = True
+            ret_dict["frame_counter"] = True
         if self.pid.done:
-            ret = True
+            ret_dict["pid"] = True
         if len(self.world.collision_sensor.get_collision_history()) > 0:
-            ret = True
+            ret_dict["collision"] = True
+
+        ret = any(ret_dict.values())
+        if ret:
+            print_blue("Terminal state: ")
+            for key, value in ret_dict.items():
+                print(key,": ", value)
         
         return ret
     
@@ -314,8 +326,8 @@ class Simulation:
         """
         if decision_index is None:
             decision_index = self.decision_counter
-        self.world.record_frame_state(frame_number=decision_index)
-        self.potential_field.update(self.world.return_frame_history(frame_number=decision_index, history_length=5))
+        self.state_manager.save_frame(frame_number=decision_index, vehicle_list=self.world.actor_list)
+        self.potential_field.update(self.state_manager.return_frame_history(frame_number=decision_index, history_length=5))
         pf = self.potential_field.calculate_field()
         state = self.autoencoder.encode(pf).flatten()
 
@@ -347,8 +359,8 @@ class Simulation:
                 self.pid.set_offset(target_offset)
 
 
-        self.world.record_frame_state(frame_number=self.frame_counter)
-        self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
+        self.state_manager.save_frame(frame_number=self.frame_counter, vehicle_list=self.world.actor_list)
+        self.potential_field.update(self.state_manager.return_frame_history(frame_number=self.frame_counter, history_length=5))
         pf = self.potential_field.calculate_field()
         state = self.autoencoder.encode(pf).flatten()
         

@@ -1,12 +1,27 @@
-from dataclasses import dataclass
+### Description:
+# This module contains the StateManager class, which is responsible for managing the state of vehicles in the simulation.
+# The StateManager class is used to record the state of vehicles at each frame, restore the state of vehicles to a specific 
+# frame, and return the state history of vehicles to calculate a potential field instance.
+
+# The VehicleState class represents the state of a vehicle in the simulation at a specific frame. It contains attributes such as
+# the vehicle's position, orientation, velocity, angular velocity, width, height, and whether it is the hero vehicle.
+
+
+### Dataclass and type hinting imports
+from dataclasses import dataclass, asdict
 from typing import List
 
+### Main imports
 import glob
 import numpy as np
 import os
 import pandas as pd
 import sys
 
+### Partial imports
+from rich import print
+
+### Carla imports
 try:
     sys.path.append(
         glob.glob(
@@ -41,8 +56,8 @@ class VehicleState:
         xAngVelocity (float): Current x angular velocity of the vehicle in radians.
         yAngVelocity (float): Current y angular velocity of the vehicle in radians.
         zAngVelocity (float): Current z angular velocity of the vehicle in radians.
-        width (float): Width of the vehicle.
-        height (float): Height of the vehicle.
+        width (float): Width of the bounding box of the vehicle.
+        height (float): Height of the bounding box of the vehicle.
         hero (bool): Indicates if the vehicle is the hero vehicle.
         frame (int): Frame number when the state was recorded.
     """
@@ -64,10 +79,11 @@ class VehicleState:
     hero: bool
     frame: int
 
-    def print_state(self):
+    def display(self):
         """
         Prints the state of the vehicle.
         """
+        print()
         print("==== Vehicle State ====")
         print(f"ID: {self.id}")
         print(f"Position: ({self.x}, {self.y}, {self.z})")
@@ -78,6 +94,15 @@ class VehicleState:
         print(f"Height: {self.height}")
         print(f"Hero: {self.hero}")
         print(f"Frame: {self.frame}")
+
+    def dict(self):
+        """
+        Returns the state as a dictionary.
+
+        Returns:
+            dict: Dictionary representation of the state.
+        """
+        return asdict(self)
 
 
 class StateManager:
@@ -153,11 +178,11 @@ class StateManager:
             vehicle_list (list): List of all vehicles in the simulation.
         """
         for vehicle in vehicle_list:
-            self.restore_vehicle_state(vehicle.id, frame_number)
+            self.restore_vehicle_state(vehicle, frame_number)
         #Remove all frames after the specified frame number
-        self.frame_list = self.frame_list[:frame_number+1]
+        self.frame_list = self.frame_list[:frame_number]
         
-    def restore_vehicle_state(self, vehicle_id, target_frame_number):
+    def restore_vehicle_state(self, vehicle: carla.Vehicle, target_frame_number: int):
         """
         Restores the state of a vehicle to the specified frame.
 
@@ -169,14 +194,13 @@ class StateManager:
         frame_state = self.frame_list[target_frame_number]
         matching_vehicle_state = None
         for state in frame_state:
-            if state.id == vehicle_id:
+            if state.id == vehicle.id:
                 matching_vehicle_state = state
                 break
         if matching_vehicle_state is None:
             raise ValueError("No matching vehicle state found.")
         #Restore the vehicle state
-        actor = self.world.get_actor(vehicle_id)
-        actor.set_transform(
+        vehicle.set_transform(
             carla.Transform(
                 carla.Location(matching_vehicle_state.x, matching_vehicle_state.y, matching_vehicle_state.z),
                 carla.Rotation(
@@ -186,14 +210,14 @@ class StateManager:
                 )
             )
         )
-        actor.set_target_velocity(
+        vehicle.set_target_velocity(
             carla.Vector3D(
                 matching_vehicle_state.xVelocity,
                 matching_vehicle_state.yVelocity,
                 matching_vehicle_state.zVelocity
             )
         )
-        actor.set_target_angular_velocity(
+        vehicle.set_target_angular_velocity(
             carla.Vector3D(
                 np.rad2deg(matching_vehicle_state.xAngVelocity),
                 np.rad2deg(matching_vehicle_state.yAngVelocity),
@@ -219,10 +243,12 @@ class StateManager:
         #Get the frame list to construct the dataframe
         frame_list = self.frame_list[start_frame:frame_number+1]
         #Create a dataframe with the state history of all vehicles
-        df = pd.DataFrame()
+        cols = frame_list[0][0].dict().keys()
+        lst = []
         for frame in frame_list:
             for vehicle_state in frame:
-                df = df.append(vehicle_state)
+                lst.append(vehicle_state.dict().values())
+        df = pd.DataFrame(lst, columns=cols)
         return df
 
     def reset(self):
