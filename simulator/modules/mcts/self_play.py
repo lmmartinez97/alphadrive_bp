@@ -83,7 +83,7 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
     root.assign_state(simulation.get_state(decision_index=len(game.action_history)))
     
     # Evaluate the root node
-    evaluate(root, game, network)
+    evaluate(root, network)
     
     # Add exploration noise to the root node
     add_exploration_noise(config, root)
@@ -93,23 +93,24 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
         print(f"Running simulation {i+1}/{config.num_simulations} in monte carlo tree search.")
         node = root
         scratch_game = game.clone()
-        node.assign_state(simulation.get_state(decision_index=None))
+        node.assign_state(simulation.get_state(decision_index=len(game.action_history)))
         search_path = [node]
 
-        # Traverse the tree until we reach either a terminal state, or the maximum number of moves allowed for mock game
+        # Traverse the tree until we reach either a terminal state, or the maximum number of moves allowed for mock game, or an unexpanded node
         while node.expanded() and not scratch_game.terminal(simulation=simulation) and len(scratch_game.action_history) < config.max_moves:
-            print(f"Playing game - move {len(scratch_game.action_history)+1}/{config.max_moves} - In game {i+1}/{config.num_simulations} of MCTS")
             action, node = select_child(config, node)
             scratch_game.apply(action=action, simulation=simulation, recording=True)
             node.assign_state(simulation.get_state(decision_index=len(scratch_game.action_history)))
             search_path.append(node)
+            #evaluate new node to generate children
+            value = evaluate(node, network)
 
         #return simulation to the original state - before MCTS started
         print(f"Restoring game state to {len(game.action_history)}")
         simulation.state_manager.restore_frame(frame_number=len(game.action_history), vehicle_list=simulation.world.actor_list) #we restore to frame of main game, NOT mock game for mcts
         simulation.decision_counter = len(game.action_history) #decision counter has increased with MCTS mock game, so we need to reset it to the main game decision counter
+        
         # Evaluate the leaf node and propagate the value back up the search path
-        value = evaluate(node, scratch_game, network)
         backpropagate(search_path, value)
         
 
@@ -203,7 +204,7 @@ def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node) -> float:
 
 
 # We use the neural network to obtain a value and policy prediction.
-def evaluate(node: Node, game: Game, network: Network) -> float:
+def evaluate(node: Node, network: Network) -> float:
     """
     Evaluate the given node in the Monte Carlo Tree Search using the neural network.
 
@@ -216,7 +217,6 @@ def evaluate(node: Node, game: Game, network: Network) -> float:
 
     Args:
         node (Node): The node to be evaluated.
-        game (Game): The current state of the game.
         network (Network): The neural network used for value and policy predictions.
 
     Returns:
@@ -226,6 +226,7 @@ def evaluate(node: Node, game: Game, network: Network) -> float:
     policy_sum = np.sum(policy_dist)
     for action, p in enumerate(policy_dist):
         node.children[action] = Node(p / policy_sum)
+
     return value
 
 

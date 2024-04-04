@@ -165,6 +165,7 @@ class Game:
         self.state_history = state_history or []
         self.child_visits = []
         self.num_actions = 3  # action space size for chess; 11259 for shogi, 362 for Go
+        self.reward_value = 0
 
     def terminal(self, simulation: Simulation) -> bool:
         """
@@ -185,7 +186,8 @@ class Game:
         Returns:
             float: The terminal value indicating the outcome or score of the game.
         """
-        return simulation.get_reward()
+        self.reward_value = simulation.get_reward()
+        return self.reward_value
 
     def legal_actions(self) -> List[int]:
         """
@@ -219,7 +221,7 @@ class Game:
         """
         simulation.mcts_step(verbose=False, recording=recording, action=action)
         self.action_history.append(action)
-        self.state_history.append(simulation.get_state(decision_index=None))
+        self.state_history.append(simulation.get_state(decision_index=len(self.action_history) - 1))
 
     def store_search_statistics(self, root: "Node"):
         """
@@ -236,29 +238,29 @@ class Game:
             ]
         )
 
-    def make_image(self, simulation: 'Simulation', state_index: int) -> List[np.array]:
+    def make_image(self, node_index: int) -> List[np.array]:
         """
         Constructs a game-specific feature representation.
 
         Args:
-            state_index (int): The index of the current game state.
+            node_index (int): The index of the current game state.
 
         Returns:
             List[float]: List of feature planes representing the game state. Comes from autoencoder
         """
-        return simulation.get_state(state_index)
+        return self.state_history[node_index]
 
-    def make_target(self, simulation: 'Simulation', state_index: int) -> Tuple[float, List[float]]:
+    def make_target(self, node_index: int) -> Tuple[float, List[float]]:
         """
         Constructs a target tuple for training.
 
         Args:
-            state_index (int): The index of the current game state.
+            node_index (int): The index of the current game state.
 
         Returns:
             Tuple[float, List[float]]: Target value and policy for training the neural network.
         """
-        return (simulation.get_reward(), self.child_visits[state_index])
+        return (self.reward_value, self.child_visits[node_index])
     
 class ReplayBuffer:
     """
@@ -310,14 +312,14 @@ class ReplayBuffer:
                 A list of tuples containing game states (images) and their target values (value, policy).
         """
         # Sample uniformly across positions.
-        move_sum = float(sum(len(g.history) for g in self.buffer))
+        move_sum = float(sum(len(g.action_history) for g in self.buffer))
         games = np.random.choice(
             self.buffer,
             size=self.batch_size,
-            p=[len(g.history) / move_sum for g in self.buffer],
+            p=[len(g.action_history) / move_sum for g in self.buffer],
         )
-        game_pos = [(g, np.random.randint(len(g.history))) for g in games]
-        return [(g.make_image(i), g.make_target(i)) for (g, i) in game_pos]
+        game_pos = [(g, np.random.randint(len(g.action_history))) for g in games]
+        return [(g.make_image(node_index=i), g.make_target(node_index = i)) for (g, i) in game_pos]
 
 
 class SharedStorage:

@@ -281,7 +281,6 @@ class Simulation:
         #     self.world.render(self.display)
         #     pygame.display.flip()
         
-        print(f"Saving simulation state on decision counter {self.decision_counter}")
         self.state_manager.save_frame(frame_number=self.decision_counter, vehicle_list=self.world.actor_list)
         self.decision_counter += 1
         # for state in self.state_manager.frame_list[self.decision_counter]:
@@ -298,10 +297,13 @@ class Simulation:
         }
         if self.frame_counter >= self.frame_limit:
             ret_dict["frame_counter"] = True
+            self.frame_counter = -1
         if self.pid.done:
             ret_dict["pid"] = True
+            self.pid.done = False
         if len(self.world.collision_sensor.get_collision_history()) > 0:
             ret_dict["collision"] = True
+            self.world.collision_sensor.history.clear()
 
         ret = any(ret_dict.values())
         if ret:

@@ -180,7 +180,7 @@ class StateManager:
         for vehicle in vehicle_list:
             self.restore_vehicle_state(vehicle, frame_number)
         #Remove all frames after the specified frame number
-        self.frame_list = self.frame_list[:frame_number]
+        self.frame_list = self.frame_list[:frame_number+1]
         
     def restore_vehicle_state(self, vehicle: carla.Vehicle, target_frame_number: int):
         """

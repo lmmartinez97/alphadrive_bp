@@ -226,6 +226,7 @@ class World(object):
         #     if self.camera_manager is not None
         #     else 0
         # )
+        self.destroy() #Destroy all actors and sensors
         self.spawn_ego_vehicle()
         self.spawn_npc_vehicles(self.npc_vehicles_num)
         self.setup_sensors()

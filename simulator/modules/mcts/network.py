@@ -88,8 +88,11 @@ class Network(object):
             The predicted value and policy.
         """
         image = np.array(image).reshape(1, self.arch[0])
+        value, policy = self.model.predict(image, verbose=0)
+        value = np.squeeze(value)
+        policy = np.squeeze(policy)
 
-        return self.model.predict(image, verbose=0)
+        return [value, policy]
 
     def train(self, batch) -> None:
         """

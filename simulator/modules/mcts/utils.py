@@ -33,7 +33,7 @@ def softmax_sample(visit_counts: List[Tuple[int, int]]) -> Tuple[int, int]:
     #find action index
     action_index = actions.index(action)
     counts = counts[action_index]
-    return action, counts
+    return counts, action
 
 def launch_job(f, *args):
     f(*args)
