@@ -32,7 +32,6 @@ def get_actor_display_name(actor, truncate=250):
 # -- CollisionSensor -----------------------------------------------------------
 # ==============================================================================
 
-
 class CollisionSensor(object):
     """Class for collision sensors"""
 
@@ -84,7 +83,6 @@ class CollisionSensor(object):
 # ==============================================================================
 # -- LaneInvasionSensor --------------------------------------------------------
 # ==============================================================================
-
 
 class LaneInvasionSensor(object):
     """Class for lane invasion sensors"""
@@ -154,3 +152,27 @@ class GnssSensor(object):
             return
         self.lat = event.latitude
         self.lon = event.longitude
+
+# ==============================================================================
+# -- OffRoadSensor --------------------------------------------------------
+# ==============================================================================
+
+class OffRoadSensor:
+    def __init__(self, parent_actor):
+        self._parent = parent_actor
+        self.off_road = False
+        self._world = self._parent.get_world()
+        self._map = self._world.get_map()
+
+    def check_off_road(self):
+        vehicle_transform = self._parent.get_transform()
+        location = vehicle_transform.location
+        waypoint = self._map.get_waypoint(location)
+        lane_type = waypoint.lane_type        
+
+        if lane_type == carla.LaneType.Sidewalk:
+            self.off_road = True
+        else:
+            self.off_road = False
+
+        return self.off_road
