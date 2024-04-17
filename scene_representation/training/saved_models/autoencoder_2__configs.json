@@ -1,0 +1,243 @@
+{
+    "model_config": {
+        "name": "AutoEncoder1",
+        "loss": "mean_squared_error",
+        "opt": "Adam",
+        "initial_learning_rate": 0.008,
+        "decay_rate": 0.99,
+        "metrics": "[<keras.src.metrics.regression_metrics.RootMeanSquaredError object at 0x7bd7b7f01700>, <keras.src.metrics.regression_metrics.MeanAbsoluteError object at 0x7bd7b7f47fd0>, <keras.src.metrics.probabilistic_metrics.BinaryCrossentropy object at 0x7bd7bd3c8b80>]"
+    },
+    "encoder_config": {
+        "Input_1": {
+            "shape": [
+                120,
+                200,
+                1
+            ],
+            "name": "Input_1"
+        },
+        "Rescaling_10": {
+            "scale": 0.00392156862745098,
+            "offset": 0.0,
+            "name": "Rescaling_10"
+        },
+        "Conv2D_11": {
+            "filters": 64,
+            "kernel_size": [
+                3,
+                5
+            ],
+            "padding": "same",
+            "strides": [
+                3,
+                5
+            ],
+            "activation": "relu",
+            "name": "Conv2D_11"
+        },
+        "MaxPooling2D_11": {
+            "pool_size": [
+                4,
+                4
+            ],
+            "padding": "same",
+            "strides": [
+                4,
+                4
+            ],
+            "name": "MaxPooling2D_11"
+        },
+        "Conv2D_12": {
+            "filters": 32,
+            "kernel_size": [
+                2,
+                2
+            ],
+            "padding": "same",
+            "strides": [
+                2,
+                2
+            ],
+            "activation": "relu",
+            "name": "Conv2D_12"
+        },
+        "Conv2D_13": {
+            "filters": 6,
+            "kernel_size": [
+                5,
+                5
+            ],
+            "padding": "same",
+            "strides": [
+                1,
+                1
+            ],
+            "activation": "relu",
+            "name": "Conv2D_13"
+        }
+    },
+    "decoder_config": {
+        "Deconv2D_21": {
+            "filters": 6,
+            "kernel_size": [
+                5,
+                5
+            ],
+            "padding": "same",
+            "strides": [
+                1,
+                1
+            ],
+            "activation": "relu",
+            "name": "Deconv2D_21"
+        },
+        "Deconv2D_22": {
+            "filters": 32,
+            "kernel_size": [
+                2,
+                2
+            ],
+            "padding": "same",
+            "strides": [
+                2,
+                2
+            ],
+            "activation": "relu",
+            "name": "Deconv2D_22"
+        },
+        "UpSampling2D_22": {
+            "size": [
+                4,
+                4
+            ],
+            "name": "UpSampling2D_22"
+        },
+        "Deconv2D_23": {
+            "filters": 24,
+            "kernel_size": [
+                3,
+                5
+            ],
+            "padding": "same",
+            "strides": [
+                3,
+                5
+            ],
+            "activation": "relu",
+            "name": "Deconv2D_23"
+        },
+        "Conv2D_24": {
+            "filters": 1,
+            "kernel_size": [
+                1,
+                1
+            ],
+            "padding": "valid",
+            "strides": [
+                1,
+                1
+            ],
+            "activation": "relu",
+            "name": "Conv2D_24"
+        }
+    },
+    "train_config": {
+        "batch_size": 32,
+        "epochs": 200,
+        "shuffle": true,
+        "ES_patience": 4,
+        "ES_min_delta": 1,
+        "verbose": 1,
+        "start_from_epoch": 1
+    },
+    "history": {
+        "loss": [
+            271.19732666015625,
+            192.8968048095703,
+            190.58148193359375,
+            187.49781799316406,
+            188.71438598632812,
+            186.60433959960938,
+            186.06802368164062,
+            185.8155059814453,
+            185.67550659179688
+        ],
+        "root_mean_squared_error": [
+            16.46806526184082,
+            13.88873291015625,
+            13.805107116699219,
+            13.692981719970703,
+            13.737335205078125,
+            13.660323143005371,
+            13.64068603515625,
+            13.631418228149414,
+            13.626275062561035
+        ],
+        "mean_absolute_error": [
+            8.554420471191406,
+            6.930186748504639,
+            6.846841335296631,
+            6.727217674255371,
+            6.762722492218018,
+            6.695732593536377,
+            6.678726673126221,
+            6.670219421386719,
+            6.665061950683594
+        ],
+        "binary_crossentropy": [
+            -292.44696044921875,
+            -294.9197998046875,
+            -295.0129699707031,
+            -295.1585998535156,
+            -295.09326171875,
+            -295.2457275390625,
+            -295.3018798828125,
+            -295.35601806640625,
+            -295.3912658691406
+        ],
+        "val_loss": [
+            201.15708923339844,
+            197.46829223632812,
+            193.90887451171875,
+            198.3313751220703,
+            192.65013122558594,
+            191.96604919433594,
+            191.72332763671875,
+            192.12034606933594,
+            192.0828399658203
+        ],
+        "val_root_mean_squared_error": [
+            14.182985305786133,
+            14.052340507507324,
+            13.925121307373047,
+            14.083016395568848,
+            13.879846572875977,
+            13.855181694030762,
+            13.84642219543457,
+            13.860748291015625,
+            13.859395027160645
+        ],
+        "val_mean_absolute_error": [
+            7.030433654785156,
+            6.87459659576416,
+            6.796284198760986,
+            7.141158580780029,
+            6.7419257164001465,
+            6.803842544555664,
+            6.771448135375977,
+            6.750279426574707,
+            6.855820178985596
+        ],
+        "val_binary_crossentropy": [
+            -299.7313232421875,
+            -300.16156005859375,
+            -300.21722412109375,
+            -299.78021240234375,
+            -300.28094482421875,
+            -300.5527648925781,
+            -300.5125427246094,
+            -300.3987731933594,
+            -300.50244140625
+        ]
+    }
+}
