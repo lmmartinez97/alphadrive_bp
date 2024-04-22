@@ -307,20 +307,21 @@ class MPCController:
         print("Closest index: ", self.closest_index)
         # Update last tracked index for faster search next time
         self.last_tracked_index = self.closest_index
-                        # Initial guess for control inputs
+        # Initial guess for control inputs
         initial_guess = np.tile(self.prev_control, (self.prediction_horizon, 1)).flatten()
-        
         self.current_state = current_state
         
         self.constraints = []
         for i in range(self.prediction_horizon):
-            self.constraints.extend([
-                # {'type': 'ineq', 'fun': lambda x: x[i*2 + 1] - 1},  # pedal <= 1
-                # {'type': 'ineq', 'fun': lambda x: -x[i*2 + 1] - 1},  # pedal >= -1
-                # {'type': 'ineq', 'fun': lambda x: x[i*2] - 1},  # steering <= 1
-                # {'type': 'ineq', 'fun': lambda x: -x[i*2] - 1},  # steering >= -1
-                {'type': 'ineq', 'fun': lambda x: self.max_steering_rate - np.abs(x[i*2] - self.prev_control[0])},  # absolute steering change rate <= max_steering_rate
-                {'type': 'ineq', 'fun': lambda x: self.max_pedal_rate - np.abs(x[i*2 + 1] - self.prev_control[1])},  # absolute pedal change rate <= max_pedal_rate
+            if i == 0:
+                self.constraints.extend([
+                    {'type': 'ineq', 'fun': lambda x: self.max_steering_rate - np.abs(x[i*2] - self.prev_control[0])},  # absolute steering change rate <= max_steering_rate
+                    {'type': 'ineq', 'fun': lambda x: self.max_pedal_rate - np.abs(x[i*2 + 1] - self.prev_control[1])},  # absolute pedal change rate <= max_pedal_rate
+                ])
+            else:
+                self.constraints.extend([
+                    {'type': 'ineq', 'fun': lambda x: self.max_steering_rate - np.abs(x[i*2] - x[(i-1)*2])},  # absolute steering change rate <= max_steering_rate
+                    {'type': 'ineq', 'fun': lambda x: self.max_pedal_rate - np.abs(x[i*2 + 1] - x[(i-1)*2 + 1])},  # absolute pedal change rate <= max_pedal_rate
                 ])
 
         # Optimize control inputs
@@ -457,7 +458,7 @@ class MPCController:
         if verbose:
             print("Lateral Error: ", lateral_error)
             print("Velocity Error: ", velocity_error)
-            print("Yaw Error: " , yaw_error)
+            print("Yaw Error: ", yaw_error)
             
         return {'pos_target': [ref['x'], ref['y']],
                 'velocity_target': ref['velocity'],
