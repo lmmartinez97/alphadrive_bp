@@ -5,7 +5,7 @@ from copy import deepcopy
 from rich import print
 from scipy.optimize import minimize
 from scipy.spatial import KDTree
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from .printers import print_blue, print_green
 
@@ -145,7 +145,7 @@ class MPCController:
 
         return closest_index
 
-    def model(self, state, control):
+    def model(self, state: Dict, control: Dict) -> Dict:
         """
         Model function for the dynamic bicycle model.
 
@@ -279,7 +279,7 @@ class MPCController:
             print("Total cost: ", cost)
         return cost
 
-    def optimize_control(self, current_state):
+    def optimize_control(self, current_state: Dict) -> Tuple[Dict, List[Dict]]:
         """
         Optimize the control inputs for the vehicle over the prediction horizon.
 
@@ -302,15 +302,12 @@ class MPCController:
                 'steering', 'pedal'.
             reconstructed states: list of states reconstructed using the model and control inputs
         """
-        # Find the index of the closest point in the reference trajectory
         self.closest_index = self.find_closest_index(current_state)
-        print("Closest index: ", self.closest_index)
-        # Update last tracked index for faster search next time
         self.last_tracked_index = self.closest_index
-        # Initial guess for control inputs
         initial_guess = np.tile(self.prev_control, (self.prediction_horizon, 1)).flatten()
         self.current_state = current_state
         
+        # Define constraints for the optimization
         self.constraints = []
         for i in range(self.prediction_horizon):
             if i == 0:
@@ -333,15 +330,10 @@ class MPCController:
                           options=self.method_opts['dict_config'],
                           jac=self.method_opts['jacobian_type'])
 
-        # Reshape the result into a 2D array and return the first row
+        # Reshape the result into a 2D array - [steer, pedal]
         optimized_control_sequence = np.reshape(result.x, (-1, 2))
-        #print("Optimized control sequence: ", optimized_control_sequence)
-        self.prev_control = optimized_control_sequence[0]
         self.calculate_total_cost(optimized_control_sequence, verbose=False)
-        #reconstructed states
         reconstructed_states = self.calculate_state_trajectory(current_state, optimized_control_sequence)
-        # for state in reconstructed_states:
-        #     print(f"State: {state}")
         
         #if the predicted velocity of the next iteration is zero, control was unsuccessful, so we go straigt with throttle = 0.3
         if reconstructed_states[0]['velocity'] < 1:
@@ -355,6 +347,8 @@ class MPCController:
             return_dict = {'steering': optimized_control_sequence[0, 0],
                         'throttle': optimized_control_sequence[0, 1] if optimized_control_sequence[0, 1] > 0 else 0,
                         'brake': -optimized_control_sequence[0, 1] if optimized_control_sequence[0, 1] < 0 else 0}         
+        
+        self.prev_control = optimized_control_sequence[0]
         
         return return_dict, reconstructed_states
 
@@ -375,7 +369,7 @@ class MPCController:
             'y': current_state['y'] + derivatives['y_dot'] * dt,
             'yaw': current_state['yaw'] + derivatives['yaw_rate'] * dt,
             'velocity': current_state['velocity'] + derivatives['velocity_dot'] * dt,
-            'pitch': current_state['pitch'],#pitch is not changing for now
+            'pitch': current_state['pitch'], # pitch remains constant
         }
         #normalize yaw
         next_state['yaw'] = (next_state['yaw'] + np.pi) % (2 * np.pi) - np.pi
@@ -414,16 +408,19 @@ class MPCController:
         """
         Set the offset for the reference trajectory.
 
+        To add the offset to the reference trajectory, a copy of the original (default) trajectory is used.
+        This method loops over the remaining points in the original reference, and calculates the new x and y. It then updates the
+        reference that is being used by the controller, as well as the KDTree that is used for finding the closest point to the current state.
         Args:
             offset (float): The offset to be added to the reference trajectory.
         """
         self.offset = offset
         for idx, ref in enumerate(self.ref_copy[self.last_tracked_index:]):
-            # Calculate the offset in the x and y directions based on the yaw angle
+            # Calculate the offset in the x and y directions based on the yaw angle of the original trajectory
             dx = offset * np.cos(ref['yaw'] + np.pi / 2)
             dy = offset * np.sin(ref['yaw'] + np.pi / 2)
 
-            # Add the offset to the x and y coordinates of the live reference trajectory
+            # Add the offset to the x and y coordinates of the original reference trajectory
             # This way the offset is applied on the original trajectory, not on the previous offset
             self.reference[self.last_tracked_index + idx]['x'] = ref['x'] + dx
             self.reference[self.last_tracked_index + idx]['y'] = ref['y'] + dy
