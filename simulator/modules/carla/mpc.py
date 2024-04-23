@@ -9,6 +9,10 @@ from typing import Any, Dict, List, Tuple
 
 from .printers import print_blue, print_green
 
+import warnings
+
+warnings.filterwarnings("ignore", module="scipy", category=RuntimeWarning)
+
 
 class MPCController:
     """Model Predictive Controller class for vehicle control."""
@@ -106,7 +110,7 @@ class MPCController:
         
         #Define optimization method
         self.method = 'SLSQP'
-        self.method_opts = {'dict_config':{'maxiter': 1000, 'disp': True, 'ftol': 1e-2, 'eps': 1e-6}, 
+        self.method_opts = {'dict_config':{'maxiter': 1000, 'disp': False, 'ftol': 1e-2, 'eps': 1e-6}, 
                             'jacobian_type': '3-point'}
         
         np.set_printoptions(precision=6, suppress=True)
@@ -195,8 +199,7 @@ class MPCController:
         for i, state in enumerate(state_trajectory):
             if closest_index + i < len(self.reference):
                 ref_state = self.reference[closest_index + i]
-            if ref_state['velocity'] - state['velocity'] < 0:
-                mult = 5                
+            mult = 1 + 4 * (ref_state['velocity'] < state['velocity'])              
             cost += mult*np.abs(ref_state['velocity'] - state['velocity']) * exponential_decay**i
 
         return cost
@@ -237,8 +240,6 @@ class MPCController:
             p2 = np.array([next_ref_state['x'], next_ref_state['y']])
             p3 = np.array([state['x'], state['y']])
             distance = np.abs(np.linalg.norm(np.cross(p2 - p1, p1 - p3)) / np.linalg.norm(p2 - p1))
-            if verbose:
-                print(f"Distance to line {i}: {distance}")
             cost += distance * exponential_decay**i
         return cost
     
