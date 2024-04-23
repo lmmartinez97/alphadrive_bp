@@ -239,7 +239,7 @@ class MPCController:
             p1 = np.array([ref_state['x'], ref_state['y']])
             p2 = np.array([next_ref_state['x'], next_ref_state['y']])
             p3 = np.array([state['x'], state['y']])
-            distance = np.abs(np.linalg.norm(np.cross(p2 - p1, p1 - p3)) / np.linalg.norm(p2 - p1))
+            distance = np.abs(np.abs(((p2[0]-p1[0])*(p1[1]-p3[1]) - (p1[0]-p3[0])*(p2[1]-p1[1])) / np.linalg.norm(p2 - p1)))
             cost += distance * exponential_decay**i
         return cost
     
@@ -263,7 +263,7 @@ class MPCController:
             
         return state_trajectory
     
-    def calculate_total_cost(self, control_sequence, verbose = False) -> float:
+    def calculate_total_cost1(self, control_sequence, verbose = False) -> float:
         """
         Calculate the total cost for the predicted trajectory.
         
@@ -274,18 +274,73 @@ class MPCController:
         tracking_cost = self.calculate_tracking_cost(self.closest_index, state_trajectory, self.exponential_decay, verbose=False)
         velocity_cost = self.calculate_velocity_cost(self.closest_index, state_trajectory, self.exponential_decay)
         yaw_cost = self.calculate_yaw_cost(self.closest_index, state_trajectory, self.exponential_decay)
-        steering_rate_cost = self.calculate_control_rate_cost(control_sequence[:, 0])
-        pedal_rate_cost = self.calculate_control_rate_cost(control_sequence[:, 1])
-        cost = self.tracking_cost_weight * tracking_cost + self.velocity_cost_weight * velocity_cost + self.yaw_cost_weight * yaw_cost + self.steering_rate_cost * steering_rate_cost + self.pedal_rate_cost * pedal_rate_cost
+        # steering_rate_cost = self.calculate_control_rate_cost(control_sequence[:, 0])
+        # pedal_rate_cost = self.calculate_control_rate_cost(control_sequence[:, 1])
+        cost = self.tracking_cost_weight * tracking_cost + self.velocity_cost_weight * velocity_cost + self.yaw_cost_weight * yaw_cost #+ self.steering_rate_cost * steering_rate_cost + self.pedal_rate_cost * pedal_rate_cost
         if verbose:
             print("Tracking cost: ", tracking_cost)
             print("Velocity cost: ", velocity_cost)
             print("Yaw cost: ", yaw_cost)
-            print("Steering rate cost: ", steering_rate_cost)
-            print("Pedal rate cost: ", pedal_rate_cost)
+            # print("Steering rate cost: ", steering_rate_cost)
+            # print("Pedal rate cost: ", pedal_rate_cost)
             print("Total cost: ", cost)
         return cost
 
+    def calculate_total_cost(self, control_sequence, verbose = False) -> float:
+        """
+        Calculate the total cost for the predicted trajectory.
+        
+        If exponential decay is true, a decay factor is applied to mitigate the important of distant points in the trajectory.
+        """
+        control_sequence = np.reshape(control_sequence, (-1, 2))
+        # Calculate state trajectory using model and control inputs
+        state_trajectory = [self.current_state]
+        for i in range(self.prediction_horizon):
+            control = {'steering': control_sequence[i, 0], 'pedal': control_sequence[i, 1]}
+            derivatives = self.model(state_trajectory[-1], control)
+            next_state = {
+                'x': state_trajectory[-1]['x'] + derivatives['x_dot'] * self.dt,
+                'y': state_trajectory[-1]['y'] + derivatives['y_dot'] * self.dt,
+                'yaw': state_trajectory[-1]['yaw'] + derivatives['yaw_rate'] * self.dt,
+                'velocity': state_trajectory[-1]['velocity'] + derivatives['velocity_dot'] * self.dt,
+                'pitch': state_trajectory[-1]['pitch'], # pitch remains constant
+            }
+            #normalize yaw
+            next_state['yaw'] = (next_state['yaw'] + np.pi) % (2 * np.pi) - np.pi
+            state_trajectory.append(next_state)
+
+        tracking_cost = 0
+        velocity_cost = 0
+        mult = 1
+        yaw_cost = 0
+
+        # calculate all costs
+        for i, state in enumerate(state_trajectory):
+            if self.closest_index + i < len(self.reference)-1:
+                ref_state = self.reference[self.closest_index + i]
+                next_ref_state = self.reference[self.closest_index + i + 1]
+            else: #if we are at the end of the reference trajectory, use the last two reference points
+                ref_state = self.reference[-2]
+                next_ref_state = self.reference[-1]
+            #calculate tracking cost
+            ## distance between the vehicle and the line that goes through the two reference points
+            p1 = np.array([ref_state['x'], ref_state['y']])
+            p2 = np.array([next_ref_state['x'], next_ref_state['y']])
+            p3 = np.array([state['x'], state['y']])
+            distance = np.abs(np.abs(((p2[0]-p1[0])*(p1[1]-p3[1]) - (p1[0]-p3[0])*(p2[1]-p1[1])) / np.linalg.norm(p2 - p1)))
+            tracking_cost += distance * self.exponential_decay**i
+
+            #calculate velocity cost
+            mult = 1 + 4 * (ref_state['velocity'] < state['velocity'])              
+            velocity_cost += mult*np.abs(ref_state['velocity'] - state['velocity']) * self.exponential_decay**i            
+
+            #calculate yaw cost
+            angle_error = np.abs(state['yaw'] - ref_state['yaw'])
+            yaw_cost += angle_error * self.exponential_decay**i            
+
+        cost = self.tracking_cost_weight * tracking_cost + self.velocity_cost_weight * velocity_cost + self.yaw_cost_weight * yaw_cost #+ self.steering_rate_cost * steering_rate_cost + self.pedal_rate_cost * pedal_rate_cost
+        return cost
+    
     def optimize_control(self, current_state: Dict) -> Tuple[Dict, List[Dict]]:
         """
         Optimize the control inputs for the vehicle over the prediction horizon.
@@ -460,8 +515,10 @@ class MPCController:
         p1 = np.array([self.reference[closest_index]['x'], self.reference[closest_index]['y']])
         p2 = np.array([self.reference[closest_index + 1]['x'], self.reference[closest_index + 1]['y']])
         p3 = np.array([current_state['x'], current_state['y']])
-        lateral_error = np.abs(np.linalg.norm(np.cross(p2 - p1, p1 - p3)) / np.linalg.norm(p2 - p1))
-
+        #Implement cross product directly
+        lateral_error = np.abs(((p2[0]-p1[0])*(p1[1]-p3[1]) - (p1[0]-p3[0])*(p2[1]-p1[1])) / np.linalg.norm(p2 - p1))
+        
+        
         #calculate sign of the lateral error
         dx = self.reference[closest_index + 1]['x'] - self.reference[closest_index]['x']
         dy = self.reference[closest_index + 1]['y'] - self.reference[closest_index]['y']

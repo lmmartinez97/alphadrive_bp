@@ -164,8 +164,8 @@ class Simulation:
             'tracking_cost_weight': 3,
             'velocity_cost_weight': 4,
             'yaw_cost_weight': 2,
-            'steering_rate_cost_weight': 0,
-            'pedal_rate_cost_weight': 0,
+            'steering_rate_cost_weight': 0, #DISABLED IN MPC CODE
+            'pedal_rate_cost_weight': 0, #DISSABLED IN MPC CODE
             'exponential_decay_rate': 0.65,
         }
         self.mpc = MPCController(parameters)
@@ -397,8 +397,8 @@ class Simulation:
                     verbose = False
                 self.game_step(verbose=verbose)
                 self.frame_counter += 1
-            self.plot_results()
-            input("Press Enter to continue")
+            # self.plot_results()
+            # input("Press Enter to continue")
             self.frame_counter = 0
             self.decision_counter = 0
             print("Restored frame state")
