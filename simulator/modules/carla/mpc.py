@@ -33,6 +33,7 @@ class MPCController:
                 - dt (float): Time step for integration (seconds)
                 - prediction_horizon (int): Prediction horizon (number of time steps)
                 - max_steering_rate (float): Maximum rate of change of steering angle per time step
+                - max_pedal_rate (float): Maximum rate of change of pedal position per time step
             reference_trajectory (list): A list of [[x, y, z], velocity] points representing the reference trajectory.
             offset (float): The offset to be added to the reference trajectory.
 
@@ -51,6 +52,7 @@ class MPCController:
             'dt': self.simulation_period,
             'prediction_horizon': 4,
             'max_steering_rate': 0.1,
+            'max_pedal_rate': 0.1,
             'tracking_cost_weight': 1,
             'velocity_cost_weight': 1,
             'yaw_cost_weight': 1,
@@ -98,14 +100,14 @@ class MPCController:
         self.last_tracked_index = 0  # Index of the last tracked point in the reference trajectory
 
         #Define optimization bounds
-        self.bounds_steer = (-0.75, 0.75)
+        self.bounds_steer = (-1, 1)
         self.bounds_pedal = (-0.5, 0.75)
         self.bounds = [self.bounds_steer, self.bounds_pedal] * self.prediction_horizon
         
         #Define optimization method
         self.method = 'SLSQP'
-        self.method_opts = {'dict_config':{'maxiter': 1000, 'disp': False, 'ftol': 1e-3, 'eps': np.deg2rad(.5)}, 
-                            'jacobian_type': '2-point'}
+        self.method_opts = {'dict_config':{'maxiter': 1000, 'disp': True, 'ftol': 1e-2, 'eps': 1e-6}, 
+                            'jacobian_type': '3-point'}
         
         np.set_printoptions(precision=6, suppress=True)
         
@@ -189,10 +191,14 @@ class MPCController:
         If exponential decay is true, a decay factor is applied to mitigate the important of distant points in the trajectory.
         """
         cost = 0
+        mult = 1
         for i, state in enumerate(state_trajectory):
             if closest_index + i < len(self.reference):
                 ref_state = self.reference[closest_index + i]
-                cost += np.linalg.norm([state['velocity'] - ref_state['velocity']]) * exponential_decay**i
+            if ref_state['velocity'] - state['velocity'] < 0:
+                mult = 5                
+            cost += mult*np.abs(ref_state['velocity'] - state['velocity']) * exponential_decay**i
+
         return cost
     
     def calculate_yaw_cost(self, closest_index: int, state_trajectory: Dict, exponential_decay: float = 1.0) -> float:
@@ -343,11 +349,11 @@ class MPCController:
                             'brake': 0}
 
         else:
-            print_green("Optimized control sequence: ", optimized_control_sequence[0])
             return_dict = {'steering': optimized_control_sequence[0, 0],
                         'throttle': optimized_control_sequence[0, 1] if optimized_control_sequence[0, 1] > 0 else 0,
                         'brake': -optimized_control_sequence[0, 1] if optimized_control_sequence[0, 1] < 0 else 0}         
-        
+
+        #print_green("Optimized control sequence: ", optimized_control_sequence[0])
         self.prev_control = optimized_control_sequence[0]
         
         return return_dict, reconstructed_states
@@ -415,15 +421,15 @@ class MPCController:
             offset (float): The offset to be added to the reference trajectory.
         """
         self.offset = offset
-        for idx, ref in enumerate(self.ref_copy[self.last_tracked_index:]):
+        for idx, ref in enumerate(self.ref_copy[self.last_tracked_index+1:-1]):
             # Calculate the offset in the x and y directions based on the yaw angle of the original trajectory
             dx = offset * np.cos(ref['yaw'] + np.pi / 2)
             dy = offset * np.sin(ref['yaw'] + np.pi / 2)
 
             # Add the offset to the x and y coordinates of the original reference trajectory
             # This way the offset is applied on the original trajectory, not on the previous offset
-            self.reference[self.last_tracked_index + idx]['x'] = ref['x'] + dx
-            self.reference[self.last_tracked_index + idx]['y'] = ref['y'] + dy
+            self.reference[self.last_tracked_index + idx + 1]['x'] = ref['x'] + dx
+            self.reference[self.last_tracked_index + idx + 1]['y'] = ref['y'] + dy
         
         #update reference tree with information of the new reference
         self.reference_tree = KDTree(np.array([[ref['x'], ref['y']] for ref in self.reference]))
@@ -443,15 +449,30 @@ class MPCController:
         #Calculate lateral error
         closest_index = self.find_closest_index(current_state)
         ref = self.reference[closest_index]
-        dx = current_state['x'] - ref['x']
-        dy = current_state['y'] - ref['y']
-        lateral_error = np.sqrt(dx**2 + dy**2)*np.sign(dy)*np.cos(ref['yaw'] - np.arctan2(dy, dx))
+        # dx = -current_state['x'] + ref['x']
+        # dy = -current_state['y'] + ref['y']
+        # lateral_error = np.sqrt(dx**2 + dy**2)*np.sign(dy)*np.cos(ref['yaw'] - np.arctan2(dy, dx))
         
+        #calculate distance between current point and the line that goes through the two reference points
+        if closest_index == len(self.reference) - 1:
+            closest_index -= 1
+        p1 = np.array([self.reference[closest_index]['x'], self.reference[closest_index]['y']])
+        p2 = np.array([self.reference[closest_index + 1]['x'], self.reference[closest_index + 1]['y']])
+        p3 = np.array([current_state['x'], current_state['y']])
+        lateral_error = np.abs(np.linalg.norm(np.cross(p2 - p1, p1 - p3)) / np.linalg.norm(p2 - p1))
+
+        #calculate sign of the lateral error
+        dx = self.reference[closest_index + 1]['x'] - self.reference[closest_index]['x']
+        dy = self.reference[closest_index + 1]['y'] - self.reference[closest_index]['y']
+        sign = np.sign(np.cross([dx, dy], [current_state['x'] - self.reference[closest_index]['x'], current_state['y'] - self.reference[closest_index]['y']]))
+        lateral_error *= sign
+
         #calculate velocity error
         velocity_error = current_state['velocity'] - ref['velocity']
-        
+
         #calculate yaw error
-        yaw_error = current_state['yaw'] - ref['yaw']
+        yaw_error = current_state['yaw'] - np.arctan2(dy, dx)
+
         if verbose:
             print("Lateral Error: ", lateral_error)
             print("Velocity Error: ", velocity_error)

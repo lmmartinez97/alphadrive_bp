@@ -158,14 +158,15 @@ class Simulation:
             'air_density': 1.2,
             'gravity': 9.81,
             'dt': self.simulation_period,
-            'prediction_horizon': 6,
-            'max_steering_rate': 0.1,
-            'tracking_cost_weight': 4,
+            'prediction_horizon': 4,
+            'max_steering_rate': 0.02,
+            'max_pedal_rate': 0.02,
+            'tracking_cost_weight': 3,
             'velocity_cost_weight': 4,
-            'yaw_cost_weight': 3,
-            'steering_rate_cost_weight': 2,
-            'pedal_rate_cost_weight': 1,
-            'exponential_decay_rate': 0.95,
+            'yaw_cost_weight': 2,
+            'steering_rate_cost_weight': 0,
+            'pedal_rate_cost_weight': 0,
+            'exponential_decay_rate': 0.65,
         }
         self.mpc = MPCController(parameters)
         
@@ -340,7 +341,7 @@ class Simulation:
         ax[0].legend()
 
         ax[1].plot(self.time,self.throttle_brake, label="Throttle/Brake", linewidth=width)
-        ax[1].plot(self.time, np.gradient(self.throttle_brake), label="ThrottleBrake Derivative", linewidth=width)
+        ax[1].plot(self.time[:-1], [self.throttle_brake[i+1]-self.throttle_brake[i] for i,_ in enumerate(self.throttle_brake[:-1])], label="ThrottleBrake increment", linewidth=width)
         ax[1].set_title("Throttle/Brake")
         ax[1].set_xlabel("Time")
         ax[1].set_ylabel("Throttle/Brake")
@@ -352,11 +353,11 @@ class Simulation:
         ax[0].plot(self.time,self.lat_error, label="Lateral Error", linewidth=width)
         ax[0].set_title("Lateral control")
         ax[0].set_xlabel("Time")
-        ax[0].set_ylabel("Yaw")
+        ax[0].set_ylabel("Later Error (m)")
         ax[0].legend()
 
         ax[1].plot(self.time,self.steer, label="Steer", linewidth=width)
-        ax[1].plot(self.time, np.gradient(self.steer), label="Steer Derivative", linewidth=width)
+        ax[1].plot(self.time[:-1], [self.steer[i+1]-self.steer[i] for i,_ in enumerate(self.steer[:-1])], label="Steer increment", linewidth=width)
         ax[1].set_title("Steer")
         ax[1].set_xlabel("Time")
         ax[1].set_ylabel("Steer")
@@ -371,6 +372,20 @@ class Simulation:
         plt.ylabel("Y")
         plt.legend()
 
+        # Acceleration and jerk figure
+        fig, ax = plt.subplots(2, 1, figsize=figsize)
+        ax[0].plot(self.time, np.gradient(self.speed, self.simulation_period), label="Acceleration", linewidth=width)
+        ax[0].set_title("Acceleration")
+        ax[0].set_xlabel("Time")
+        ax[0].set_ylabel("Acceleration (m/s^2)")
+        ax[0].legend()
+
+        ax[1].plot(self.time, np.gradient(np.gradient(self.speed, self.simulation_period), self.simulation_period), label="Jerk", linewidth=width)
+        ax[1].set_title("Jerk")
+        ax[1].set_xlabel("Time")
+        ax[1].set_ylabel("Jerk (m/s^3)")
+        ax[1].legend()
+        
         plt.show()
 
     def run(self):
