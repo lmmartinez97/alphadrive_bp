@@ -307,15 +307,14 @@ class Simulation:
         """
         ret_dict = {
             "frame_counter": False,
-            "pid": False,
+            "mpc": False,
             "collision": False,
         }
         if self.frame_counter >= self.frame_limit:
             ret_dict["frame_counter"] = True
             self.frame_counter = -1
-        if self.pid.done:
-            ret_dict["pid"] = True
-            self.pid.done = False
+        if self.mpc.is_done():
+            ret_dict["mpc"] = True
         if len(self.world.collision_sensor.get_collision_history()) > 0:
             ret_dict["collision"] = True
             self.world.collision_sensor.history.clear()
@@ -333,7 +332,7 @@ class Simulation:
         Method for getting the reward for the current state
         """
         reward = 0
-        if self.pid.done:
+        if self.mpc.done:
             reward = 100
         if len(self.world.collision_sensor.get_collision_history()) > 0:
             reward = -100
@@ -372,7 +371,7 @@ class Simulation:
             self.state_manager.save_frame(frame_number=self.decision_counter, vehicle_list=self.world.actor_list)
             self.potential_field.update(self.state_manager.return_frame_history(frame_number=self.decision_counter, history_length=5))
             #Return potential field dropping last column and row to match the autoencoder input shape
-            pf = self.potential_field.calculate_field()[:,:-1,:-1]
+            pf = self.potential_field.calculate_field()
             state = self.autoencoder.encode(pf).flatten()
             if self.decision_counter % 15 == 0:
                 print("Toggling action")

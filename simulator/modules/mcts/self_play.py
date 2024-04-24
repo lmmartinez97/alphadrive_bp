@@ -110,7 +110,8 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
         simulation.state_manager.restore_frame(frame_number=len(game.action_history), vehicle_list=simulation.world.actor_list) #we restore to frame of main game, NOT mock game for mcts
         simulation.decision_counter = len(game.action_history) #decision counter has increased with MCTS mock game, so we need to reset it to the main game decision counter
         
-        # Evaluate the leaf node and propagate the value back up the search path
+        # Evaluate the leaf node and propagate the termination value
+        value = simulation.get_reward()
         backpropagate(search_path, value)
         
 

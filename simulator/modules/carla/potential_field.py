@@ -134,7 +134,7 @@ class PotentialField:
             self.field_list = np.add(self.calculate_field_ego(inner_group, ego_vehicle) * frame_attenuation, temp_grid)
         self.field_list = np.asarray(self.field_list)
 
-        return self.field_list.reshape(-1, self.num_y, self.num_x, 1)
+        return self.field_list.reshape(-1, self.num_y, self.num_x, 1)[:,:-1,:-1]
         
     def plot_field(self):
         """

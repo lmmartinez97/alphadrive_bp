@@ -153,16 +153,18 @@ class Game:
         num_actions (int): Represents the size of the action space for the game.
     """
 
-    def __init__(self, action_history: List[int] = None, state_history: List[np.array] = None) -> None:
+    def __init__(self, action_history: List[int] = None, state_history: List[np.array] = None, node_history: List[Node] = None) -> None:
         """
         Initializes a new Game instance.
 
         Args:
             action_history (List[int], optional): List of actions representing the game history.
             state_history (List[np.array], optional): List of states representing the game history.
+            node_history (List[Node], optional): List of nodes representing the game history.
         """
         self.action_history = action_history or []
         self.state_history = state_history or []
+        self.node_history = node_history or []
         self.child_visits = []
         self.num_actions = 3  # action space size for chess; 11259 for shogi, 362 for Go
         self.reward_value = 0
@@ -181,7 +183,7 @@ class Game:
         Returns the reward associated with the terminal state of the current game.
 
         Args:
-            to_play (int): The player to play at the terminal state.
+            simulation (Simulation): The simulation object representing the current game state.
 
         Returns:
             float: The terminal value indicating the outcome or score of the game.
@@ -212,7 +214,7 @@ class Game:
         """
         return copy.deepcopy(self)
 
-    def apply(self, action: int, recording: bool, simulation: 'Simulation'):
+    def apply(self, action: int, recording: bool, simulation: 'Simulation', node: Node) -> None:
         """
         Applies an action to the game state.
 
@@ -222,6 +224,7 @@ class Game:
         simulation.mcts_step(verbose=False, recording=recording, action=action)
         self.action_history.append(action)
         self.state_history.append(simulation.get_state(decision_index=len(self.action_history) - 1))
+        self.node_history.append(node)
 
     def store_search_statistics(self, root: "Node"):
         """
@@ -237,6 +240,7 @@ class Game:
                 for a in range(self.num_actions)
             ]
         )
+
 
     def make_image(self, node_index: int) -> List[np.array]:
         """
