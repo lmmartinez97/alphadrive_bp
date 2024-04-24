@@ -363,24 +363,24 @@ class Simulation:
             self.world.render(self.display)
             pygame.display.flip()
 
-        if self.controller and self.controller.parse_events():
-            return -1, -1, prev_timestamp
+        # if self.controller and self.controller.parse_events():
+        #     return -1, -1, prev_timestamp
                     
-        #block that toggles the action every 15 decision periods - as of now, 15 seconds. Just to test the controller accuracy.
+        # decision loop
         if self.frame_counter % self.decision_period == 0 and self.action is not None:
             self.decision_counter += 1
-            print("Decision counter: ", self.decision_counter)
+            self.state_manager.save_frame(frame_number=self.decision_counter, vehicle_list=self.world.actor_list)
+            self.potential_field.update(self.state_manager.return_frame_history(frame_number=self.decision_counter, history_length=5))
+            #Return potential field dropping last column and row to match the autoencoder input shape
+            pf = self.potential_field.calculate_field()[:,:-1,:-1]
+            state = self.autoencoder.encode(pf).flatten()
             if self.decision_counter % 15 == 0:
                 print("Toggling action")
                 self.action = 0 if self.action == 2 else 2
                 print("New action: ", self.action)
-                self.mpc.set_offset(self.available_actions[self.action])
-
-        self.state_manager.save_frame(frame_number=self.decision_counter, vehicle_list=self.world.actor_list)
-        self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
-        pf = self.potential_field.calculate_field()
-        state = self.autoencoder.encode(pf).flatten()
+                self.mpc.set_offset(self.available_actions[self.action])        
         
+        # control loop
         velocity = self.world.player.get_velocity()
         speed = np.linalg.norm([velocity.x, velocity.y])
         transform = self.world.player.get_transform()
