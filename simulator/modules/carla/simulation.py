@@ -145,14 +145,14 @@ class Simulation:
         self.world = World(self.sim_world, self.hud, self.args, self.simulation_period)
         print_green("Created world instance")
         
-        # #load autoencoder -- remove these features for now until mpc works
-        # self.autoencoder = load_model(model_name= "autoencoder_1" ,directory="../scene_representation/training/saved_models")
-         # #Initialize Potential Field -- remove these features for now until mpc works
-        # rx = 50 # horizontal semiaxis of ellipse to consider as ROI
-        # ry = 6 # vertical semiaxis of ellipse to consider as ROI
-        # sx = 0.5 # step size in x direction
-        # sy = 0.1 # step size in y direction
-        # self.potential_field = PotentialField(radius_x = rx, radius_y = ry, step_x = sx, step_y = sy)
+        #load autoencoder -- remove these features for now until mpc works
+        self.autoencoder = load_model(model_name= "autoencoder_3" ,directory="../scene_representation/training/saved_models")
+         #Initialize Potential Field -- remove these features for now until mpc works
+        rx = 50 # horizontal semiaxis of ellipse to consider as ROI
+        ry = 6 # vertical semiaxis of ellipse to consider as ROI
+        sx = 0.5 # step size in x direction
+        sy = 0.1 # step size in y direction
+        self.potential_field = PotentialField(radius_x = rx, radius_y = ry, step_x = sx, step_y = sy)
  
         #Initialize GlobalRoutePlanner
         self.grp = GlobalRoutePlanner(wmap=self.world.map, sampling_resolution= self.simulation_period * self.agent_type.max_speed / 3.6) 
@@ -213,7 +213,7 @@ class Simulation:
 
         self.world.dataframe = pd.DataFrame()
         self.timestamp = self.world.world.get_snapshot().timestamp
-        self.first_timestamp = self.prev_timestamp
+        self.first_timestamp = self.timestamp
 
         for waypoint, _ in self.route:
             self.world.world.debug.draw_point(
@@ -375,7 +375,7 @@ class Simulation:
                 print("New action: ", self.action)
                 self.mpc.set_offset(self.available_actions[self.action])
 
-        self.world.record_frame_state(frame_number=self.frame_counter)
+        self.state_manager.save_frame(frame_number=self.decision_counter, vehicle_list=self.world.actor_list)
         self.potential_field.update(self.world.return_frame_history(frame_number=self.frame_counter, history_length=5))
         pf = self.potential_field.calculate_field()
         state = self.autoencoder.encode(pf).flatten()
