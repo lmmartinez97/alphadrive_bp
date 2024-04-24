@@ -189,6 +189,7 @@ class Simulation:
         """Method for initializing a new episode"""
         print("Initializing new game")
         self.world.restart(self.args)
+        self.state_manager.reset()
 
         #hand over control of npcs to traffic manager
         self.traffic_manager.set_synchronous_mode(True)
