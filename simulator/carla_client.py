@@ -26,6 +26,8 @@ import traceback
 from rich import print
 from numpy import random
 
+import cProfile
+
 # ==============================================================================
 # -- pygame import -------------------------------------------------------------
 # ==============================================================================
@@ -183,12 +185,11 @@ def main():
     logging.info("listening to server %s:%s", args.host, args.port)
 
     try:
-        simulation = Simulation(args=args, frame_limit=10000, episode_limit=100)
+        simulation = Simulation(args=args, frame_limit=10000, episode_limit=1)
         simulation.run()
 
     except KeyboardInterrupt as e:
         print("\n")
-        simulation.plot_results()
         if simulation.world is not None:
             settings = simulation.world.world.get_settings()
             settings.synchronous_mode = False
@@ -216,4 +217,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    cProfile.run('main()', filename='client_profile_1_func')
