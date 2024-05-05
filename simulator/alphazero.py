@@ -57,7 +57,7 @@ def alphazero(args) -> Network:
         "network_arch": [200, 32, 10],
         "training_steps": int(1e2),
         "checkpoint_interval": int(1e3),
-        "training_iterations": 1,
+        "training_iterations": 4,
         "games_per_iteration": 1,
         "window_size": int(600),
         "batch_size": 64,

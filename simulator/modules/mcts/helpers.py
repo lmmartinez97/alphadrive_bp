@@ -332,7 +332,7 @@ class ReplayBuffer:
         self.batch_iter += 1
         with open(fname, 'w') as f:
             for item in ret:
-                dict_ = {'state': item[0].tolist(), 'value': item[1][0].tolist(), 'policy': item[1][1].tolist()}
+                dict_ = {'state': item[0].tolist(), 'value': item[1][0], 'policy': item[1][1]}
                 json.dump(dict_, f)
                 f.write('\n')
         return ret

@@ -334,9 +334,9 @@ class Simulation:
         """
         reward = 0
         if self.mpc.is_done():
-            reward = 100
+            reward = 100.0
         if len(self.world.collision_sensor.get_collision_history()) > 0:
-            reward = -100
+            reward = -100.0
         return reward
     
     def get_state(self, decision_index):

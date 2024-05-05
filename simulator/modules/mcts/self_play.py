@@ -144,6 +144,10 @@ def select_action(config: AlphaZeroConfig, game: Game, root: Node) -> int:
         _, action = softmax_sample(visit_counts=visit_counts)
     else:
         _, action = max(visit_counts)
+    print(f"Visit counts: {visit_counts}")
+    print(softmax_sample(visit_counts))
+    print(max(visit_counts))
+    input("Press Enter to continue...")
     return action
 
 

@@ -91,7 +91,11 @@ class Network(object):
         value, policy = self.model.predict(image, verbose=0)
         value = np.squeeze(value)
         policy = np.squeeze(policy)
-
+        #print(f"State: {image}")
+        print(f"Value: {value}")
+        print(f"Policy: {policy}")
+        #input("Press Enter to continue...")
+        
         return [value, policy]
 
     def train(self, batch) -> None:
