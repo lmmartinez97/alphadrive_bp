@@ -242,6 +242,7 @@ class Simulation:
         
     def mcts_step(self, verbose = False, recording = False, action = 0):
         self.action = action
+        print("Action: ", self.action)
         #set pid offset to the action
         target_offset = self.available_actions[self.action]
         self.mpc.set_offset(target_offset)
@@ -332,7 +333,7 @@ class Simulation:
         Method for getting the reward for the current state
         """
         reward = 0
-        if self.mpc.done:
+        if self.mpc.is_done():
             reward = 100
         if len(self.world.collision_sensor.get_collision_history()) > 0:
             reward = -100

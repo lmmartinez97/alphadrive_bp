@@ -171,3 +171,9 @@ computation_info*
 .DS_Store
 
 .vscode/settings.json
+
+#ignore every log folder
+simulator/logs/*
+
+checkpoints/*
+simulator/latest_network/*

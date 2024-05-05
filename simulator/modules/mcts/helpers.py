@@ -10,6 +10,7 @@
 from __future__ import division
 
 import copy
+import json
 import numpy as np
 
 from copy import deepcopy
@@ -214,7 +215,7 @@ class Game:
         """
         return copy.deepcopy(self)
 
-    def apply(self, action: int, recording: bool, simulation: 'Simulation', node: Node) -> None:
+    def apply(self, action: int, recording: bool, simulation: 'Simulation') -> None:
         """
         Applies an action to the game state.
 
@@ -224,7 +225,6 @@ class Game:
         simulation.mcts_step(verbose=False, recording=recording, action=action)
         self.action_history.append(action)
         self.state_history.append(simulation.get_state(decision_index=len(self.action_history) - 1))
-        self.node_history.append(node)
 
     def store_search_statistics(self, root: "Node"):
         """
@@ -292,6 +292,7 @@ class ReplayBuffer:
         self.window_size: int = config.window_size
         self.batch_size: int = config.batch_size
         self.buffer: List[Game] = []
+        self.batch_iter = 1
 
     def save_game(self, game: "Game") -> None:
         """
@@ -323,7 +324,18 @@ class ReplayBuffer:
             p=[len(g.action_history) / move_sum for g in self.buffer],
         )
         game_pos = [(g, np.random.randint(len(g.action_history))) for g in games]
-        return [(g.make_image(node_index=i), g.make_target(node_index = i)) for (g, i) in game_pos]
+        ret = [(g.make_image(node_index=i), g.make_target(node_index = i)) for (g, i) in game_pos]
+        #dump batch into file for state-action-value analysis
+        #create file name with iteration number
+        fname = '/home/lmmartinez/Tesis/codigo_tesis/simulator/logs/' + 'batch' + str(self.batch_iter) + '.txt'
+        #batch is a list of tuples, each tuple is a pair of lists: [state, [value, policy]]        
+        self.batch_iter += 1
+        with open(fname, 'w') as f:
+            for item in ret:
+                dict_ = {'state': item[0].tolist(), 'value': item[1][0].tolist(), 'policy': item[1][1].tolist()}
+                json.dump(dict_, f)
+                f.write('\n')
+        return ret
 
 
 class SharedStorage:

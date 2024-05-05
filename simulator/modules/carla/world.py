@@ -86,7 +86,7 @@ class World(object):
         
         # Non playable vehicles
         self.npcs = []
-        self.npc_vehicles_num = 1
+        self.npc_vehicles_num = 5
 
 
         # Dictionary to store frames
