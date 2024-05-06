@@ -8,7 +8,10 @@ import traceback
 
 from rich import print
 
-from modules.mcts.helpers import SharedStorage, ReplayBuffer, AlphaZeroConfig
+from modules.mcts.alphazeroconfig import AlphaZeroConfig
+from modules.mcts.sharedstorage import SharedStorage
+from modules.mcts.replaybuffer import ReplayBuffer
+
 from modules.mcts.network import Network
 from modules.mcts.self_play import run_selfplay
 from modules.mcts.utils import create_directory, train_network
