@@ -61,7 +61,7 @@ def play_game(config: AlphaZeroConfig, network: Network, simulation: Simulation)
     while not game.terminal(simulation=simulation) and len(game.node_history) < config.max_moves:
         print(f"Playing game - move {len(game.node_history)+1}/{config.max_moves}")
         action, root = run_mcts(config, game, network, simulation)
-        game.apply(action=action, simulation=simulation, recording=True)
+        game.apply(action=action, simulation=simulation, recording=True, node=root)
     return game
 
 
@@ -111,6 +111,7 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
         
         # Evaluate the leaf node and propagate the termination value to root node
         value = simulation.get_reward()
+        print(f"Value of simulation: {value}")
         backpropagate(root, value, root_child)
         
 

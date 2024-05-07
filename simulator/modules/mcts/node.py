@@ -68,6 +68,6 @@ class Node(object):
             Dict[int, float]: The policy of the node.
         """
         policy = [0] * len(self.children)
-        for action, count in self.children.items():
-            policy[action] = count / self.visit_count
+        for action, children in self.children.items():
+            policy[action] = children.visit_count / self.visit_count
         return policy

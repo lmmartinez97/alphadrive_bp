@@ -83,6 +83,7 @@ class Simulation:
         self.episode_counter = 0
         self.frame_counter = 0
         self.decision_counter = 0
+        self.reward = 0
         self.args = args
         if not frame_limit:
             self.frame_limit = np.inf
@@ -314,10 +315,13 @@ class Simulation:
         if self.frame_counter >= self.frame_limit:
             ret_dict["frame_counter"] = True
             self.frame_counter = -1
+            self.reward = -100
         if self.mpc.is_done():
             ret_dict["mpc"] = True
+            self.reward = 100
         if len(self.world.collision_sensor.get_collision_history()) > 0:
             ret_dict["collision"] = True
+            self.reward = -100
             self.world.collision_sensor.history.clear()
 
         ret = any(ret_dict.values())
@@ -332,12 +336,7 @@ class Simulation:
         """
         Method for getting the reward for the current state
         """
-        reward = 0
-        if self.mpc.is_done():
-            reward = 100.0
-        if len(self.world.collision_sensor.get_collision_history()) > 0:
-            reward = -100.0
-        return reward
+        return self.reward
     
     def get_state(self, decision_index):
         """

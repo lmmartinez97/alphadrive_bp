@@ -65,17 +65,18 @@ class ReplayBuffer:
         # Sample moves until reaching desired batch size
         batch = []
         while len(batch) < self.batch_size:
+            print('Sampling batch...')
             # Sample a game with probability proportional to its length
             game = np.random.choice(self.buffer, p=[len(g.node_history) / self.total_moves for g in self.buffer])
             
             # Check if all moves in the game have been sampled
-            if len(sampled_moves[game]) == len(game.action_history):
+            if len(sampled_moves[game]) == len(game.node_history):
                 # If all moves have been sampled, continue to the next iteration
                 continue
             
             # Sample a move index from the game that hasn't been sampled yet
             while True:
-                move_index = np.random.randint(len(game.action_history))
+                move_index = np.random.randint(len(game.node_history))
                 if move_index not in sampled_moves[game]:
                     # Mark the sampled move as sampled
                     sampled_moves[game].add(move_index)
@@ -84,14 +85,18 @@ class ReplayBuffer:
             # Append the sampled state and target values to the batch
             state = game.node_history[move_index].state
             target = (game.node_history[move_index].value(), game.node_history[move_index].policy())
+            print('Target: ', target)
             batch.append((state, target))
+            if len(batch) == self.total_moves:
+                break
 
         #dump batch into file for state-action-value analysis
         #create file name with iteration number
-        fname = '/home/lmmartinez/Tesis/codigo_tesis/simulator/logs/' + 'batch' + str(self.batch_iter) + '.txt'
+        fname = '/home/lmmartinez/Tesis/codigo_tesis/simulator/logs/' + 'batch' + str(self.batch_iter) + '.json'
         #batch is a list of tuples, each tuple is a pair of lists: [state, [value, policy]]        
         self.batch_iter += 1
         with open(fname, 'w') as f:
+            print('Dumping batch into file: ', fname)
             for item in batch:
                 dict_ = {'state': item[0].tolist(), 'value': item[1][0], 'policy': item[1][1]}
                 json.dump(dict_, f)
