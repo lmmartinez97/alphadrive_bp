@@ -22,27 +22,20 @@ class Game:
           Consider subclassing for different scenarios (e.g. dense lane circulation, merging, roundabout, intersection, etc.)
           Include the simulation attribute to control interaction with CARLA client.
     Attributes:
-        action_history (List[int]): List of actions representing the game history.
-        state_history (List[np.array]): List of states representing the game history.
-        child_visits (List[List[float]]): Stores the visit count distribution of child nodes for each state in the game.
+        node_history (List[Node]): Represents the history of nodes visited during the search.
         num_actions (int): Represents the size of the action space for the game.
     """
 
-    def __init__(self, action_history: List[int] = None, state_history: List[np.array] = None, node_history: List[Node] = None) -> None:
+    def __init__(self, node_history: List[Node] = None, num_actions: int = 3) -> None:
         """
         Initializes a new Game instance.
 
         Args:
-            action_history (List[int], optional): List of actions representing the game history.
-            state_history (List[np.array], optional): List of states representing the game history.
             node_history (List[Node], optional): List of nodes representing the game history.
+            num_actions (int, optional): The size of the action space for the game.
         """
-        self.action_history = action_history or []
-        self.state_history = state_history or []
-        self.node_history = node_history or []
-        self.child_visits = []
-        self.num_actions = 3  # action space size for chess; 11259 for shogi, 362 for Go
-        self.reward_value = 0
+        self.node_history = [] if node_history is None else node_history
+        self.num_actions = num_actions  
 
     def terminal(self, simulation: Simulation) -> bool:
         """
@@ -89,32 +82,15 @@ class Game:
         """
         return copy.deepcopy(self)
 
-    def apply(self, action: int, recording: bool, simulation: 'Simulation') -> None:
+    def apply(self, action: int, recording: bool, simulation: Simulation, node: Node) -> None:
         """
         Applies an action to the game state.
 
         Args:
             action (int): The action to be applied.
         """
+        self.node_history.append(node)
         simulation.mcts_step(verbose=False, recording=recording, action=action)
-        self.action_history.append(action)
-        self.state_history.append(simulation.get_state(decision_index=len(self.action_history) - 1))
-
-    def store_search_statistics(self, root: "Node"):
-        """
-        Stores visit statistics for child nodes.
-
-        Args:
-            root (Node): The root node of the search tree.
-        """
-        sum_visits = sum(child.visit_count for child in root.children.values())
-        self.child_visits.append(
-            [
-                (root.children[a].visit_count / sum_visits) if a in root.children else 0
-                for a in range(self.num_actions)
-            ]
-        )
-
 
     def make_image(self, node_index: int) -> List[np.array]:
         """
