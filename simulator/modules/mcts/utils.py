@@ -9,7 +9,9 @@ from datetime import datetime
 from rich import print
 from typing import List, Tuple
 
-from .helpers import AlphaZeroConfig, SharedStorage, ReplayBuffer
+from .alphazeroconfig import AlphaZeroConfig
+from .replaybuffer import ReplayBuffer
+from .sharedstorage import SharedStorage
 from .network import Network
 
 import numpy as np

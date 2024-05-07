@@ -18,7 +18,7 @@ class Node(object):
         self.visit_count: int = 0
         self.state: List[float] = []
         self.value_sum: float = 0
-        self.children: Dict[int, Node] = {'0': None, '1': None, '2': None}
+        self.children: Dict[int, Node] = {0: None, 1: None, 2: None}
 
     def assign_state(self, state: List[float]) -> None:
         """
@@ -38,6 +38,10 @@ class Node(object):
             value (float): The value of the child node.
         """
         if child_visited is not None:
+            #create all children if they don't exist
+            for action, child in self.children.items():
+                if child is None:
+                    self.children[action] = Node()
             if child_visited not in self.children.keys():
                 raise ValueError("Child not found in children.")
             self.children[child_visited].value_sum += value
@@ -63,7 +67,7 @@ class Node(object):
         Returns:
             Dict[int, float]: The policy of the node.
         """
-        policy = {}
+        policy = [0] * len(self.children)
         for action, count in self.children.items():
             policy[action] = count / self.visit_count
         return policy

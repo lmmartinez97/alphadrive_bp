@@ -91,7 +91,7 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
         print(f"Running simulation {i+1}/{config.num_simulations} in monte carlo tree search.")
         scratch_game = game.clone() #initialize scratch_game by copying the real game with node history until now        
         #determine the first action to take in the scratch game using policy rollout
-        action = policy_based_rollout(node=root, network=Network)
+        action = policy_based_rollout(node=root, network=network)
         root_child = action
         scratch_game.apply(action=action, simulation=simulation, recording=False, node=root) #apply the action to the scratch game
         
@@ -101,7 +101,7 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
             node = Node()
             node.assign_state(simulation.get_state(decision_index=len(scratch_game.node_history)))
             #select action using policy rollout
-            action, node = policy_based_rollout(node=node, network=network)
+            action = policy_based_rollout(node=node, network=network)
             scratch_game.apply(action=action, simulation=simulation, recording=False, node=node)
 
         #return simulation to the original state - before MCTS started
@@ -115,7 +115,7 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network, simulation: 
         
 
     # Select the best action from the root node
-    return select_action(config, game, root), root
+    return select_action(config=config, node=root), root
 
 def random_rollout(node: Node) -> int:
     """
@@ -129,7 +129,6 @@ def random_rollout(node: Node) -> int:
     """
     node.visit_count += 1
     next_action = np.random.choice(list(node.children.keys()))
-    node.update_child_visit_count(child_visited=next_action)
 
     return next_action
 
@@ -154,8 +153,6 @@ def policy_based_rollout(node: Node, network: Network) -> float:
         next_action = np.random.choice(list(node.children.keys()))
     else: #choose the action with the highest probability
         next_action = np.argmax(policy_dist)
-
-    node.update_child_visit_count(child_visited=next_action)
 
     return next_action
 

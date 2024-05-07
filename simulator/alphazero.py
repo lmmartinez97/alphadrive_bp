@@ -84,6 +84,9 @@ def alphazero(args) -> Network:
         for i in range(config.training_iterations):
             print(f"Iteration {i+1}/{config.training_iterations}")
             run_selfplay(config=config, storage=storage, replay_buffer=replay_buffer, simulation=simulation)
+            if len(replay_buffer.buffer) < config.batch_size:
+                print("Not enough data in replay buffer. Skipping training.")
+                continue
             print(f"Training network {i+1}/{config.training_iterations}")
             train_network(config=config, storage=storage, replay_buffer=replay_buffer, training_iter=i, path=save_path)
 

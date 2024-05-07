@@ -91,27 +91,3 @@ class Game:
         """
         self.node_history.append(node)
         simulation.mcts_step(verbose=False, recording=recording, action=action)
-
-    def make_image(self, node_index: int) -> List[np.array]:
-        """
-        Constructs a game-specific feature representation.
-
-        Args:
-            node_index (int): The index of the current game state.
-
-        Returns:
-            List[float]: List of feature planes representing the game state. Comes from autoencoder
-        """
-        return self.state_history[node_index]
-
-    def make_target(self, node_index: int) -> Tuple[float, List[float]]:
-        """
-        Constructs a target tuple for training.
-
-        Args:
-            node_index (int): The index of the current game state.
-
-        Returns:
-            Tuple[float, List[float]]: Target value and policy for training the neural network.
-        """
-        return (self.reward_value, self.child_visits[node_index])
