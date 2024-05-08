@@ -57,6 +57,7 @@ try:
 except IndexError:
     pass
 import carla
+
 from carla import ColorConverter as cc
 # ==============================================================================
 # -- Local imports --- ---------------------------------------------------------
