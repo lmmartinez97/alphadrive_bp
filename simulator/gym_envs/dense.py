@@ -18,11 +18,20 @@ class Dense(gym.Env):
         
         self.simulation = simulation
 
-    def reset(self, seed=None, options=None):
+        # Define action and observation space
+        self.observation_space = spaces.Box(low=-1, high=1, shape=(200,), dtype=np.float32)
+        self.action_space = spaces.Discrete(3) # 0 keep lane, 1 shift right, 2 shift left
+
+        #create logging directory if it does not exist
+        
+
+    def reset(self):
+        #setup logging
+
         self.simulation.init_game()
 
     def step(self, action):
-        self.simulation.mcts_step(verbose=False, recording=false, action=action)
+        self.simulation.mcts_step(verbose=False, recording=False, action=action)
     
     def render(self):
         pass
