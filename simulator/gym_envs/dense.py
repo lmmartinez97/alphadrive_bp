@@ -9,8 +9,8 @@ import numpy as np
 from gymnasium import spaces
 
 ## Local imports
-from ..modules.carla.simulation import Simulation
-from helper_functions import create_logging_directory
+from modules.carla.simulation import Simulation
+from .helper_functions import create_logging_directory
 
 
 class Dense(gym.Env):
@@ -47,8 +47,9 @@ class Dense(gym.Env):
         # Declare step variables
         self.observation = None
         self.reward = 0
-        self.done = None
-        self.info = None
+        self.done = False
+        self.truncated = False
+        self.info = {}
 
         #Declare episode variables
         self.episode_list = [] #Contains a dictionary for each step with the step data
@@ -57,23 +58,26 @@ class Dense(gym.Env):
         log_directory_path ="./gym_envs/env_logs"
         self.logging_path = create_logging_directory(log_directory_path)
         
-    def reset(self):
+    def reset(self, seed=None, options=None):
         """
         Resets the environment and the simulation to the initial state.
         """
+        print("Resetting environment")
 
         self.simulation.init_game()
         self.step_count = 0
-        self.episode_count += 1
 
         #Clear step variables
-        self.observation = None
+        self.observation = np.zeros(200, dtype = np.float32)
         self.reward = 0
         self.done = False
-        self.info = None
+        self.truncated = False
+        self.info = {}
 
         #Clear episode variables
         self.episode_list.clear()
+
+        return self.observation, {}
 
     def step(self, action):
         """
@@ -101,6 +105,7 @@ class Dense(gym.Env):
         #gather step data
         self.observation = self._get_observation()
         self.done_dict, self.done = self._get_done()
+        self.truncated = False
         self.info = self._get_info()
         self.reward = self._get_reward()
 
@@ -110,8 +115,9 @@ class Dense(gym.Env):
         if self.done:
             self.log_episode()
             self.reset()
+            self.episode_count += 1
 
-        return self.observation, self.reward, self.done, self.info
+        return self.observation, self.reward, self.done, self.truncated, self.info
     
     def log_step(self):
         """
@@ -120,7 +126,7 @@ class Dense(gym.Env):
         temp_dict = {
             "episode": self.episode_count,
             "step": self.step_count,
-            "observation": self.observation,
+            "observation": self.observation.tolist(),
             "reward": self.reward,
             "done": self.done,
             "info": self.info
@@ -146,7 +152,7 @@ class Dense(gym.Env):
         Returns:
             observation (np.array): The observation for the current step. Comes from an encoded potential field calculation that has been flattened.
         """
-        self.observation = self.simulation.get_state()
+        self.observation = self.simulation.get_state(decision_index=self.step_count)
         return self.observation
 
     def _get_reward(self):
@@ -174,7 +180,7 @@ class Dense(gym.Env):
             timeout_reward = -1 * self.timeout_weight
 
         #Reward for going as fast as possible
-        speed_reward = np.square(self.ego_speed - self.simulation.speed) * self.speed_weight
+        speed_reward = np.square(self.ego_speed - self.simulation.speed[-1]) * self.speed_weight
 
         #Reward for staying in the lane
         if self.action != self.ego_lane:
@@ -203,7 +209,7 @@ class Dense(gym.Env):
         self.info = {}
         self.info["step_count"] = self.step_count
         self.info["episode_count"] = self.episode_count
-        self.info["frame"] = self.simulation.state_manager.return_frame_history(frame_number=self.step_count, history_length=1) #vehicles within one hundred meters of ego
+        # self.info["frame"] = self.simulation.state_manager.return_frame_history(frame_number=self.step_count, history_length=1).to_dict() #vehicles within one hundred meters of ego
 
         return self.info
 

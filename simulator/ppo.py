@@ -10,9 +10,12 @@ import traceback
 from datetime import datetime
 from rich import print
 from stable_baselines3 import PPO
-from stable_baselines3.common.logger import configure, JSONOutputFormat
-from stable_baselines3.common.callbacks import EvalCallback, CheckpointCallback
+from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.env_checker import check_env
 from typing import Callable
+
+import tensorboard
+from torch import tensor
 
 ## Local Imports
 from gym_envs.dense import Dense
@@ -148,7 +151,7 @@ def main():
 
         #Initialize environment
         env = Dense(simulation=simulation, options=options)
-    
+        check_env(env)
         #Configure callbacks
         timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         checkpoint_path = f"./gym_envs/checkpoint_models/{timestamp}"
@@ -159,7 +162,9 @@ def main():
         
         #Training loop
         model = PPO("MlpPolicy", env, verbose=1, tensorboard_log="./gym_envs/tensorboard_logs/")
-        model.learn(total_timesteps=100000, callback=checkpoint_callback) #trains for about 1.15 days of simulation time
+        model.learn(total_timesteps=100000,
+                    callback=checkpoint_callback,
+                    progress_bar=True) #trains for about 1.15 days of simulation time
         model.save("./gym_envs/models/ppo_dense")
     
     except KeyboardInterrupt:
@@ -168,6 +173,7 @@ def main():
         sys.exit()
 
     except Exception as e:
+        env.close()
         print(traceback.format_exc())
 
 if __name__ == '__main__':

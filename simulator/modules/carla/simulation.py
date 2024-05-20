@@ -247,7 +247,6 @@ class Simulation:
         
     def mcts_step(self, verbose = False, recording = False, action = 0):
         self.action = action
-        print("Action: ", self.action)
         #set pid offset to the action
         target_offset = self.available_actions[self.action]
         self.mpc.set_offset(target_offset)
@@ -329,10 +328,10 @@ class Simulation:
             self.world.collision_sensor.history.clear()
 
         ret = any(self.termination_dict.values())
-        if ret:
-            print_blue("Terminal state: ")
-            for key, value in self.termination_dict.items():
-                print(key,": ", value)
+        # if ret:
+        #     print_blue("Terminal state: ")
+        #     for key, value in self.termination_dict.items():
+        #         print(key,": ", value)
         
         return ret
     

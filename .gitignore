@@ -177,3 +177,7 @@ simulator/logs/*
 
 checkpoints/*
 simulator/latest_network/*
+simulator/gym_envs/env_logs/*
+simulator/gym_envs/tensorboard_logs/*
+simulator/gym_envs/checkpoint_models/*
+simulator/gym_envs/sb3_logs/*
