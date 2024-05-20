@@ -73,10 +73,14 @@ from .autoencoder import load_model
 
 class Simulation:
   
-    def __init__(self, args = None, frame_limit = None, episode_limit = 100):
-        """Constructor method for simulation class
-            TODO: Add support for multiple vehicles
-                  Add support for mcts
+    def __init__(self, args = None, frame_limit = None, episode_limit = 100, options = None):
+        """
+        Constructor method for simulation class
+        Args:
+            args (argparse.Namespace): Arguments for the simulation
+            frame_limit (int): The number of frames to run the simulation for
+            episode_limit (int): The number of episodes to run the simulation for
+            options (dict): Dictionary of options for the simulation
         """
         # simulation variables
         print()
@@ -118,7 +122,7 @@ class Simulation:
         
         self.agents_dict = {"cautious": Cautious, "normal": Normal, "aggressive": Aggressive}
         self.agent_type = self.agents_dict[self.args.behavior]
-        self.agent_type.max_speed = 35
+        self.agent_type.max_speed = 35 if options is None else options.get("ego_speed", 10)*3.6 # m/s to km/h
         
         #include static camera
         if self.args.static_camera:
@@ -307,27 +311,27 @@ class Simulation:
         """
         Method for checking if the current state is terminal
         """
-        ret_dict = {
+        self.termination_dict = {
             "frame_counter": False,
             "mpc": False,
             "collision": False,
         }
         if self.frame_counter >= self.frame_limit:
-            ret_dict["frame_counter"] = True
+            self.termination_dict["frame_counter"] = True
             self.frame_counter = -1
             self.reward = -100
         if self.mpc.is_done():
-            ret_dict["mpc"] = True
+            self.termination_dict["mpc"] = True
             self.reward = 100
         if len(self.world.collision_sensor.get_collision_history()) > 0:
-            ret_dict["collision"] = True
+            self.termination_dict["collision"] = True
             self.reward = -100
             self.world.collision_sensor.history.clear()
 
-        ret = any(ret_dict.values())
+        ret = any(self.termination_dict.values())
         if ret:
             print_blue("Terminal state: ")
-            for key, value in ret_dict.items():
+            for key, value in self.termination_dict.items():
                 print(key,": ", value)
         
         return ret
