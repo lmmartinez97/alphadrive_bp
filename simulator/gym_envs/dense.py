@@ -11,6 +11,7 @@ from gymnasium import spaces
 ## Local imports
 from modules.carla.simulation import Simulation
 from .helper_functions import create_logging_directory
+from modules.carla.printers import print_blue, print_green, print_highlight, print_red
 
 
 class Dense(gym.Env):
@@ -62,7 +63,7 @@ class Dense(gym.Env):
         """
         Resets the environment and the simulation to the initial state.
         """
-        print("Resetting environment")
+        print_red("Resetting environment")
 
         self.simulation.init_game()
         self.step_count = 0

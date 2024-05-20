@@ -14,9 +14,6 @@ from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.env_checker import check_env
 from typing import Callable
 
-import tensorboard
-from torch import tensor
-
 ## Local Imports
 from gym_envs.dense import Dense
 from gym_envs.helper_functions import create_directory
