@@ -504,7 +504,6 @@ class MPCController:
         """
         #Calculate lateral error
         closest_index = self.find_closest_index(current_state)
-        print("Closest index: ", closest_index)
         ref = self.reference[closest_index]
         # dx = -current_state['x'] + ref['x']
         # dy = -current_state['y'] + ref['y']
